@@ -1,0 +1,19 @@
+preset = "nature_double"
+
+grid = [["a", "b", "b"],
+        ["c", "d", "d"]]
+
+row_heights = ["1fr", "0.7fr"]
+gap = "4mm"
+
+[panels.a]
+fn = "panels.py:scatter_main"
+
+[panels.b]
+fn = "panels.py:timeseries"
+
+[panels.c]
+src = "schema.svg"
+
+[panels.d]
+fn = "panels.py:histogram"

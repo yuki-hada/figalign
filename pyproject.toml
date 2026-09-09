@@ -1,0 +1,26 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "figalign"
+version = "0.0.1"
+description = "論文figureを実寸で並べる。レイアウト宣言 → ソルバ → 実寸描画。"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.27",  # the websocket implementation lives in the extras
+    "watchfiles>=0.21",
+    "matplotlib>=3.8",
+]
+
+[project.scripts]
+figalign = "figalign.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/figalign"]
+
+[tool.ruff]
+line-length = 100

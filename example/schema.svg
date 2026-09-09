@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 120" width="200" height="120">
+  <!-- Stands in for a hand-drawn asset: a schematic of an experimental setup -->
+  <g fill="none" stroke="#222" stroke-width="1.6">
+    <rect x="14" y="34" width="52" height="52" rx="3"/>
+    <circle cx="134" cy="60" r="26"/>
+    <path d="M66 60 H108"/>
+    <path d="M100 54 l8 6 -8 6" fill="#222"/>
+  </g>
+  <g font-family="Helvetica" font-size="11" fill="#222" text-anchor="middle">
+    <text x="40" y="64">stimulus</text>
+    <text x="134" y="64">sample</text>
+    <text x="87" y="46">flow</text>
+  </g>
+</svg>

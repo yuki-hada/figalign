@@ -1,0 +1,6 @@
+figure-layout-tool-spec.md
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
