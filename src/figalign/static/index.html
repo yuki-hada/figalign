@@ -54,7 +54,7 @@
   select:focus, input:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
   a { color: var(--accent); }
   .spacer { flex: 1; }
-  #size-fields[hidden], #pdf[hidden] { display: none; }
+  #size-fields[hidden] { display: none; }
 
   #link {
     display: inline-flex;
@@ -130,6 +130,7 @@
   <button id="reload">redraw</button>
   <span class="spacer"></span>
   <a id="pdf" href="#" target="_blank">PDF</a>
+  <a id="svg" href="/api/figure.svg" target="_blank">SVG</a>
   <span id="link">watch</span>
 </header>
 
@@ -194,10 +195,9 @@ async function draw(note = "") {
   const figure = isFigure();
   const name = $("panel").value;
   $("size-fields").hidden = figure;  // when composing, the solver owns the size
-  $("pdf").hidden = figure;          // composed PDF output is not implemented yet
   const query = new URLSearchParams({ w: $("w").value, h: $("h").value });
   const url = figure ? "/api/figure.svg" : `/api/panel/${name}.svg?${query}`;
-  if (!figure) $("pdf").href = `/api/panel/${name}.pdf?${query}`;
+  $("pdf").href = figure ? "/api/figure.pdf" : `/api/panel/${name}.pdf?${query}`;
 
   $("stage").classList.add("stale");
   const t0 = performance.now();
@@ -220,7 +220,10 @@ async function draw(note = "") {
     $("stage").innerHTML = body;
     const failed = (res.headers.get("X-Figalign-Errors") || "").split(",").filter(Boolean);
     if (failed.length) showError(`描画に失敗したパネル: ${failed.join(", ")}\n(該当セルにトレースバックを表示)`);
-    status(`${figure ? "figure" : name} — ${ms}ms — 実寸表示${note}`);
+    const passes = res.headers.get("X-Figalign-Passes");
+    const conv = res.headers.get("X-Figalign-Converged");
+    const align = figure && passes ? ` — 整列${passes}パス${conv === "0" ? " (未収束)" : ""}` : "";
+    status(`${figure ? "figure" : name} — ${ms}ms — 実寸表示${align}${note}`);
   } else {
     let detail = body;
     try { detail = JSON.parse(body).detail ?? body; } catch (_) {}

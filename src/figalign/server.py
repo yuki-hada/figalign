@@ -13,7 +13,8 @@ from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnec
 from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, Response
 
 from . import compose, figspec, loader
-from .figure import _read_src, build_figure
+from .export import ExportError, to_pdf
+from .figure import _read_src, build_figure, resolve
 from .figspec import FigSpec, SpecError
 from .grid import GridError
 from .layout import solve_layout
@@ -78,7 +79,8 @@ def create_app(root: Path, watch: bool = True) -> FastAPI:
     def api_spec() -> dict:
         spec = current_spec()
         preset = spec.preset
-        layout = solve_layout(spec)
+        resolved = resolve(spec)
+        layout = resolved.layout
         return {
             "root": str(spec.root),
             "preset": {
@@ -91,13 +93,19 @@ def create_app(root: Path, watch: bool = True) -> FastAPI:
             "data_ref": spec.data_ref,
             "grid": spec.grid,
             "labels": layout.labels,
-            "figure": {"width_mm": layout.width_mm, "height_mm": layout.height_mm},
+            "figure": {
+                "width_mm": layout.width_mm,
+                "height_mm": layout.height_mm,
+                "passes": resolved.passes,
+                "converged": resolved.converged,
+            },
             "panels": [
                 {
                     "name": name,
                     "kind": spec.panels[name].kind,
                     "ref": spec.panels[name].fn or spec.panels[name].src,
                     "box": vars(layout.boxes[name]),
+                    "inner": vars(layout.inner_box(name)),
                 }
                 for name in spec.order
             ],
@@ -134,7 +142,31 @@ def create_app(root: Path, watch: bool = True) -> FastAPI:
         return Response(
             result.svg,
             media_type="image/svg+xml",
-            headers={"X-Figalign-Errors": ",".join(sorted(result.errors))},
+            headers={
+                "X-Figalign-Errors": ",".join(sorted(result.errors)),
+                "X-Figalign-Passes": str(result.passes),
+                "X-Figalign-Converged": "1" if result.converged else "0",
+            },
+        )
+
+    @app.get("/api/figure.pdf")
+    def api_figure_pdf(text: str = Query(default="paths", pattern="^(paths|keep)$")) -> Response:
+        """The deliverable. `text=keep` leaves the text as text instead of outlining it."""
+        spec = current_spec()
+        try:
+            result = build_figure(spec, text_as_paths=(text == "paths"))
+            pdf = to_pdf(result.svg)
+        except SpecError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except ExportError as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+        return Response(
+            pdf,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": 'inline; filename="figure.pdf"',
+                "X-Figalign-Errors": ",".join(sorted(result.errors)),
+            },
         )
 
     @app.get("/api/panel/{name}.svg")

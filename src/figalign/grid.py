@@ -145,6 +145,83 @@ def solve_tracks(
     return [v if kind == "mm" else remainder * v / weights for kind, v in tracks]
 
 
+def solve_inner_tracks(
+    specs: list[object] | None,
+    count: int,
+    gap_mm: float,
+    total_mm: float | None,
+    lead_mm: list[float],
+    trail_mm: list[float],
+    fr_base_mm: float = DEFAULT_FR_ROW_MM,
+) -> tuple[list[float], list[float], float]:
+    """Solve for the size of the *inner* boxes -- the axes frames themselves (spec 5.2).
+
+    `lead_mm[j]` / `trail_mm[j]` are the margins reserved before and after track j.
+
+    `gap` is the distance from one frame to the next, and it is a *minimum*: where the
+    facing margins need more room than that, the spacing grows to fit them, because the
+    alternative is tick labels written on top of each other.
+
+    Returns the inner sizes, their offsets from the figure edge, and the resulting total.
+    """
+    if specs is None:
+        specs = ["1fr"] * count
+    if len(specs) != count:
+        raise GridError(f"トラック指定が {len(specs)} 個、grid は {count} 本")
+
+    tracks = [parse_track(spec) for spec in specs]
+    gaps = [
+        max(gap_mm, trail_mm[j] + lead_mm[j + 1]) for j in range(count - 1)
+    ]
+    outside = lead_mm[0] + trail_mm[count - 1]
+
+    if total_mm is None:
+        # No total given: 1fr is worth fr_base_mm and the figure grows to fit.
+        inner = [v if kind == "mm" else v * fr_base_mm for kind, v in tracks]
+    else:
+        fixed = sum(v for kind, v in tracks if kind == "mm")
+        weights = sum(v for kind, v in tracks if kind == "fr")
+        available = total_mm - outside - sum(gaps) - fixed
+        if weights > 0 and available <= 0:
+            raise GridError(
+                f"軸枠に使える幅が残らない: 全体 {total_mm:.4g}mm - 余白 {outside:.4g}mm "
+                f"- 間隔 {sum(gaps):.4g}mm - 固定 {fixed:.4g}mm"
+            )
+        inner = [
+            v if kind == "mm" else available * v / weights for kind, v in tracks
+        ]
+
+    offsets, acc = [], lead_mm[0]
+    for j, size in enumerate(inner):
+        offsets.append(acc)
+        acc += size + (gaps[j] if j < count - 1 else 0.0)
+    return inner, offsets, acc + trail_mm[count - 1]
+
+
+def track_margins(
+    cells: dict[str, Cell],
+    margins: dict[str, tuple[float, float, float, float]],
+    count: int,
+    axis: str,
+) -> tuple[list[float], list[float]]:
+    """Reduce per-panel margins to per-track margins.
+
+    A panel only contributes at the tracks it starts and ends on: a panel spanning two
+    columns says nothing about the boundary it crosses.
+    """
+    lead = [0.0] * count
+    trail = [0.0] * count
+    for name, cell in cells.items():
+        left, right, top, bottom = margins.get(name, (0.0, 0.0, 0.0, 0.0))
+        if axis == "x":
+            start, end, before, after = cell.col0, cell.col1 - 1, left, right
+        else:
+            start, end, before, after = cell.row0, cell.row1 - 1, top, bottom
+        lead[start] = max(lead[start], before)
+        trail[end] = max(trail[end], after)
+    return lead, trail
+
+
 def cell_boxes(
     cells: dict[str, Cell],
     col_widths: list[float],

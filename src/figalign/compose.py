@@ -12,7 +12,7 @@ import re
 import xml.etree.ElementTree as ET
 
 from .grid import Box
-from .layout import Layout
+from .layout import LABEL_PAD_MM, Layout
 from .presets import Preset
 from .units import mm_to_pt, pt_to_mm
 
@@ -32,7 +32,6 @@ _DROP = {f"{{{SVG_NS}}}metadata", f"{{{SVG_NS}}}style"}
 ROOT_STYLE = "*{stroke-linejoin: round; stroke-linecap: butt}"
 
 LABEL_WEIGHT = "bold"
-LABEL_INSET_MM = 0.0
 
 
 def compose(
@@ -40,9 +39,16 @@ def compose(
     preset: Preset,
     panel_svgs: dict[str, str],
     errors: dict[str, str] | None = None,
+    placements: dict[str, Box] | None = None,
 ) -> str:
-    """Assemble the final SVG from the layout and the rendered panels."""
+    """Assemble the final SVG from the layout and the rendered panels.
+
+    `placements` says where each panel's SVG goes. A matplotlib panel is drawn on a canvas
+    that includes its own margins, so it belongs at its outer box; an external asset has no
+    margins and belongs at the inner box, where it lines up with the frames beside it.
+    """
     errors = errors or {}
+    placements = placements or layout.boxes
     root = ET.Element(
         f"{{{SVG_NS}}}svg",
         {
@@ -60,10 +66,12 @@ def compose(
         if name in errors:
             _error_cell(root, name, box, preset, errors[name])
         elif name in panel_svgs:
-            root.append(_nest(panel_svgs[name], name, box))
+            root.append(_nest(panel_svgs[name], name, placements.get(name, box)))
 
     for name, label in layout.labels.items():
-        _label(root, layout.boxes[name], preset, label)
+        # Anchored to the frame, not the canvas: flush with the panel's left edge and
+        # sitting just above the axes frame, which is where journals put it.
+        _label(root, layout.boxes[name], layout.inner_box(name), preset, label)
 
     return ET.tostring(root, encoding="unicode")
 
@@ -150,15 +158,17 @@ def _intrinsic_view_box(src: ET.Element) -> str:
     return f"0 0 {dim('width', 100.0):.6g} {dim('height', 100.0):.6g}"
 
 
-def _label(parent: ET.Element, box: Box, preset: Preset, text: str) -> None:
+def _label(
+    parent: ET.Element, outer: Box, inner: Box, preset: Preset, text: str
+) -> None:
     """A panel label: coordinates in mm, font size converted from pt."""
     size_mm = pt_to_mm(preset.font_size_pt)
     el = ET.SubElement(
         parent,
         f"{{{SVG_NS}}}text",
         {
-            "x": f"{box.x + LABEL_INSET_MM:.6g}",
-            "y": f"{box.y + size_mm:.6g}",
+            "x": f"{outer.x:.6g}",
+            "y": f"{max(inner.y - LABEL_PAD_MM, outer.y + size_mm):.6g}",
             "font-family": preset.font_family,
             "font-size": f"{size_mm:.6g}",
             "font-weight": LABEL_WEIGHT,
