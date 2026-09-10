@@ -1,0 +1,27 @@
+[workspace]
+name = "figalign"
+version = "0.0.1"
+channels = ["conda-forge"]
+# Linux is here because the intended setup is often to run the server next to the data on
+# a compute machine and forward the port.
+platforms = ["osx-arm64", "osx-64", "linux-64"]
+
+[dependencies]
+python = "3.12.*"
+# matplotlib-base leaves out the GUI toolkits. figalign forces the Agg backend, so they
+# would only be weight.
+matplotlib-base = ">=3.8"
+fastapi = ">=0.110"
+# The plain uvicorn package has no websocket implementation, and the preview needs one.
+uvicorn-standard = ">=0.27"
+watchfiles = ">=0.21"
+# The reason this project is packaged with pixi: cairosvg needs libcairo, a C library that
+# pip cannot supply. conda-forge ships it, so no system package and no root are needed.
+cairosvg = ">=2.7"
+
+[pypi-dependencies]
+figalign = { path = ".", editable = true }
+
+[tasks]
+serve = "figalign example"
+pdf = "figalign example -o figure.pdf"
