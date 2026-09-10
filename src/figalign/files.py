@@ -39,7 +39,7 @@ class ConflictError(RuntimeError):
     def __init__(self, path: str, expected: str, actual: str):
         self.path, self.expected, self.actual = path, expected, actual
         super().__init__(
-            f"{path} はディスク上で変更されている (読んだとき {expected[:8]}、現在 {actual[:8]})"
+            f"{path} changed on disk (read as {expected[:8]}, now {actual[:8]})"
         )
 
 
@@ -58,27 +58,27 @@ def digest_of(text: str) -> str:
 def resolve(root: Path, relative: str) -> Path:
     """Turn a client-supplied relative path into a path inside the project, or refuse."""
     if not relative or relative.startswith("/") or "\x00" in relative:
-        raise FileAccessError(f"扱えないパス: {relative!r}")
+        raise FileAccessError(f"unusable path: {relative!r}")
 
     candidate = Path(relative)
     if candidate.is_absolute() or ".." in candidate.parts:
-        raise FileAccessError(f"プロジェクト外への参照: {relative!r}")
+        raise FileAccessError(f"points outside the project: {relative!r}")
 
     root = root.resolve()
     # resolve() follows symlinks, so a link pointing outside the project fails the next check
     path = (root / candidate).resolve()
     if not path.is_relative_to(root):
-        raise FileAccessError(f"プロジェクト外への参照: {relative!r}")
+        raise FileAccessError(f"points outside the project: {relative!r}")
     if path.suffix.lower() not in EDITABLE_SUFFIXES:
         allowed = ", ".join(sorted(EDITABLE_SUFFIXES))
-        raise FileAccessError(f"編集対象外の拡張子: {path.suffix or '(なし)'} (許可: {allowed})")
+        raise FileAccessError(f"not an editable suffix: {path.suffix or '(none)'} (allowed: {allowed})")
     return path
 
 
 def read(root: Path, relative: str) -> FileState:
     path = resolve(root, relative)
     if not path.is_file():
-        raise FileNotFoundError(f"ファイルが無い: {relative}")
+        raise FileNotFoundError(f"file not found: {relative}")
     text = path.read_text(encoding="utf-8")
     return FileState(
         path=relative,
@@ -115,7 +115,7 @@ def undo(root: Path, relative: str) -> FileState:
     path = resolve(root, relative)
     history = _snapshots.get(path)
     if not history:
-        raise FileAccessError(f"{relative} に戻せる履歴が無い (履歴はサーバー内のみで、再起動で消える)")
+        raise FileAccessError(f"no history to restore for {relative} (snapshots live in the server only and are lost on restart)")
     previous = history.pop()
     path.write_text(previous, encoding="utf-8")
     return FileState(

@@ -199,7 +199,7 @@ def _error_cell(
     size_mm = pt_to_mm(preset.font_size_pt) * 0.85
     # The label (a, b, c...) is drawn separately at the top left, so start one line below it
     top_mm = pt_to_mm(preset.font_size_pt) + size_mm * 1.4
-    lines = [f"{name}: 描画失敗"] + _tail(message, box, size_mm, top_mm)
+    lines = [f"{name}: failed to draw"] + _tail(message, box, size_mm, top_mm)
     for i, line in enumerate(lines):
         el = ET.SubElement(
             g,

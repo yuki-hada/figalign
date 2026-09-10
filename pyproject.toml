@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "figalign"
 version = "0.0.1"
-description = "論文figureを実寸で並べる。レイアウト宣言 → ソルバ → 実寸描画。"
+description = "Lay out paper figures at true physical size: declaration -> solver -> real-size drawing."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { file = "LICENSE" }
@@ -14,8 +14,14 @@ dependencies = [
     "uvicorn[standard]>=0.27",  # the websocket implementation lives in the extras
     "watchfiles>=0.21",
     "matplotlib>=3.8",
-    "cairosvg>=2.7",  # SVG -> PDF for the final output
 ]
+
+[project.optional-dependencies]
+# cairosvg needs a system libcairo, which pip cannot provide. Everything except composed
+# PDF output works without it -- the preview, SVG output, live reload and single-panel PDF
+# (that one goes through matplotlib's own PDF backend) -- so a missing cairo must not block
+# installing figalign at all.
+pdf = ["cairosvg>=2.7"]
 
 [project.scripts]
 figalign = "figalign.cli:main"

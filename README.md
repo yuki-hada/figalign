@@ -12,12 +12,50 @@ layout declaration -> solver -> true size (mm) per panel -> matplotlib draws at 
 
 Because nothing is scaled afterwards, font sizes and line widths never drift between panels.
 
-## Development environment
+## Install
 
 ```sh
-micromamba create -n figalign -c conda-forge python=3.12 matplotlib fastapi uvicorn watchfiles
+git clone https://github.com/yuki-hada/figalign
+cd figalign
+uv sync
+uv run figalign example
+```
+
+`uv.lock` is committed, so this resolves to the exact versions the figures were checked
+against. That matters more here than it usually does -- see below.
+
+For PDF output, add the extra:
+
+```sh
+uv sync --extra pdf
+```
+
+cairosvg needs a system `libcairo`, which pip cannot supply. On macOS `brew install cairo`,
+on Debian `apt install libcairo2`. Where there is no root -- a compute cluster, typically --
+take the conda route instead, which ships cairo as a package:
+
+```sh
+micromamba create -n figalign -c conda-forge python=3.12 matplotlib fastapi uvicorn watchfiles cairosvg
 micromamba run -n figalign python -m pip install -e . --no-deps
 ```
+
+Everything except composed PDF works without cairo: the preview, SVG output, live reload,
+and single-panel PDF, which goes through matplotlib's own PDF backend.
+
+## Reproducibility
+
+The figure's geometry is a function of the environment, not only of `fig.toml`. Margins are
+measured from `get_tightbbox()`, and what that returns depends on the tick locations
+matplotlib chose and on the fonts it resolved. A different matplotlib version can therefore
+produce a differently sized figure from the same declaration. Pinning the environment is
+what protects the output, which is why the lock file is committed rather than gitignored.
+
+Given a fixed environment, the output is byte-identical between runs. Two settings are
+needed for that and neither is the default:
+
+- `svg.hashsalt` is fixed. Otherwise matplotlib names its clip paths and markers from
+  `uuid4()` and the same figure differs on every render.
+- The date is dropped from the metadata, in both the SVG and the PDF.
 
 ## Running
 
@@ -133,9 +171,29 @@ Two consequences worth knowing:
   (spec 6.3), so where facing margins need more than `gap`, the spacing grows to fit them.
   Below that threshold `gap` has no effect; above it, it takes over.
 
+## The window
+
+Editor on the left, preview on the right, with a divider you can drag (double-click resets
+it). Code wants height more than width, so the editor gets a full-height column rather than
+a strip along the bottom. The default split leaves the preview wide enough for the preset at
+true size; the width is remembered.
+
+The `zoom` selector reads `fit / 50% / 75% / 100% true size / 150% / 200%` and defaults to
+`fit`. The effective percentage is always displayed beside it, turning amber the moment it is
+not 100%. Showing a
+figure at 78% while someone judges whether a line is too heavy would undo the point of the
+tool, so scaling is never silent and `fit` only ever shrinks -- it will not enlarge past true
+size. Hovering the percentage reports the natural size, the room available, and what `fit`
+would choose.
+
+The natural size is taken from the millimetres the SVG declares, never from the laid-out
+box: `#frame` sits inside `#zoomer`, whose width is what the previous call set to
+natural x scale, so measuring the box would feed the scale back into its own input and the
+figure would shrink further on every call.
+
 ## Editing in the browser
 
-The preview pane sits above a tab strip: `data`, one tab per panel, then `layout`.
+The editor is a tab strip over the code: `data`, one tab per panel, then `layout`.
 
 A tab is a *view* of a file, not a slice of one. Several panels normally live in the same
 `panels.py`, so those tabs share a single buffer and the tab only decides where to scroll --
@@ -158,7 +216,10 @@ event (spec 3.4). Two consequences of taking that seriously:
   project, and anything that is not `.py` / `.toml` / `.svg` are refused. The server binds
   to localhost by default but `--host` can expose it.
 
-`undo save` steps back through whole-file snapshots (spec 7.2 -- it is text, so nothing
+Lines wrap: the column is deliberately narrow so the preview keeps its room, and ordinary
+Python lines would otherwise need constant horizontal scrolling.
+
+`undo` steps back through whole-file snapshots (spec 7.2 -- it is text, so nothing
 cleverer is needed). They live in the server's memory and are **lost when it restarts**.
 
 ## Checking before you print

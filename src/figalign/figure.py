@@ -181,5 +181,5 @@ def _read_src(spec: FigSpec, src: str) -> str:
     """
     path = (spec.root / src).resolve()
     if not path.is_file():
-        raise FileNotFoundError(f"素材が無い: {path}")
+        raise FileNotFoundError(f"asset not found: {path}")
     return path.read_text(encoding="utf-8")

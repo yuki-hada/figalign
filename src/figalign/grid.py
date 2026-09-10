@@ -53,22 +53,22 @@ def normalize_grid(raw: object) -> list[list[str]]:
         rows = [list(line.strip()) for line in raw.strip().splitlines() if line.strip()]
     elif isinstance(raw, list):
         if not raw:
-            raise GridError("grid が空")
+            raise GridError("the grid is empty")
         if all(isinstance(r, str) for r in raw):
             # mosaic notation written one row per string, single-character names
             rows = [list(r.strip()) for r in raw if r.strip()]
         elif all(isinstance(r, list) for r in raw):
             rows = [[str(c) for c in r] for r in raw]
         else:
-            raise GridError("grid の行は文字列か配列で揃える")
+            raise GridError("grid rows must be all strings or all arrays")
     else:
-        raise GridError(f"grid の型が不正: {type(raw).__name__}")
+        raise GridError(f"unusable type for grid: {type(raw).__name__}")
 
     if not rows:
-        raise GridError("grid が空")
+        raise GridError("the grid is empty")
     widths = {len(r) for r in rows}
     if len(widths) != 1:
-        raise GridError(f"grid の行の長さが揃っていない: {sorted(widths)}")
+        raise GridError(f"grid rows differ in length: {sorted(widths)}")
     return rows
 
 
@@ -81,7 +81,7 @@ def find_cells(rows: list[list[str]]) -> dict[str, Cell]:
                 positions.setdefault(name, []).append((r, c))
 
     if not positions:
-        raise GridError("grid にパネルが1つも無い")
+        raise GridError("the grid holds no panels")
 
     cells: dict[str, Cell] = {}
     for name, pos in positions.items():
@@ -91,7 +91,7 @@ def find_cells(rows: list[list[str]]) -> dict[str, Cell]:
         col0, col1 = min(cs), max(cs) + 1
         expected = (row1 - row0) * (col1 - col0)
         if len(pos) != expected:
-            raise GridError(f"パネル {name!r} の占める範囲が矩形でない")
+            raise GridError(f"panel {name!r} does not occupy a rectangle")
         cells[name] = Cell(name, row0, col0, row1, col1)
     return cells
 
@@ -103,12 +103,12 @@ def parse_track(value: object) -> tuple[str, float]:
         if m:
             weight = float(m.group(1))
             if weight <= 0:
-                raise GridError(f"fr は正の値で指定する: {value!r}")
+                raise GridError(f"fr must be positive: {value!r}")
             return ("fr", weight)
     try:
         return ("mm", parse_length(value))  # type: ignore[arg-type]
     except UnitError:
-        raise GridError(f"トラック指定が読めない: {value!r} (例: '1fr', '25mm')") from None
+        raise GridError(f"cannot read the track {value!r} (e.g. '1fr', '25mm')") from None
 
 
 def solve_tracks(
@@ -127,7 +127,7 @@ def solve_tracks(
     if specs is None:
         specs = ["1fr"] * count
     if len(specs) != count:
-        raise GridError(f"トラック指定が {len(specs)} 個、grid は {count} 本")
+        raise GridError(f"{len(specs)} track(s) given for {count} in the grid")
 
     tracks = [parse_track(s) for s in specs]
     gaps_mm = gap_mm * max(count - 1, 0)
@@ -140,7 +140,7 @@ def solve_tracks(
     remainder = total_mm - fixed - gaps_mm
     if weights > 0 and remainder <= 0:
         raise GridError(
-            f"固定長 {fixed:.4g}mm + gap {gaps_mm:.4g}mm が全体 {total_mm:.4g}mm を超えている"
+            f"fixed {fixed:.4g}mm + gaps {gaps_mm:.4g}mm exceed the total {total_mm:.4g}mm"
         )
     return [v if kind == "mm" else remainder * v / weights for kind, v in tracks]
 
@@ -167,7 +167,7 @@ def solve_inner_tracks(
     if specs is None:
         specs = ["1fr"] * count
     if len(specs) != count:
-        raise GridError(f"トラック指定が {len(specs)} 個、grid は {count} 本")
+        raise GridError(f"{len(specs)} track(s) given for {count} in the grid")
 
     tracks = [parse_track(spec) for spec in specs]
     gaps = [
@@ -184,8 +184,8 @@ def solve_inner_tracks(
         available = total_mm - outside - sum(gaps) - fixed
         if weights > 0 and available <= 0:
             raise GridError(
-                f"軸枠に使える幅が残らない: 全体 {total_mm:.4g}mm - 余白 {outside:.4g}mm "
-                f"- 間隔 {sum(gaps):.4g}mm - 固定 {fixed:.4g}mm"
+                f"nothing left for the axes frames: total {total_mm:.4g}mm - margins {outside:.4g}mm "
+                f"- gaps {sum(gaps):.4g}mm - fixed {fixed:.4g}mm"
             )
         inner = [
             v if kind == "mm" else available * v / weights for kind, v in tracks

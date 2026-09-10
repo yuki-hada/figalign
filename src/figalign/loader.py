@@ -35,7 +35,7 @@ def split_ref(ref: str) -> tuple[str, str]:
     """Split `"panels.py:scatter_main"` into `("panels.py", "scatter_main")`."""
     file, sep, name = ref.partition(":")
     if not sep or not file or not name:
-        raise PanelRefError(f"参照が読めない: {ref!r} (期待する形: 'panels.py:scatter_main')")
+        raise PanelRefError(f"cannot read the reference {ref!r} (expected 'panels.py:scatter_main')")
     return file, name
 
 
@@ -43,7 +43,7 @@ def load_module(root: Path, rel_path: str) -> ModuleType:
     """Import `root / rel_path`, re-executing it when the mtime has changed."""
     path = (root / rel_path).resolve()
     if not path.is_file():
-        raise FileNotFoundError(f"ファイルが無い: {path}")
+        raise FileNotFoundError(f"file not found: {path}")
 
     mtime = path.stat().st_mtime
     cached = _modules.get(path)
@@ -55,7 +55,7 @@ def load_module(root: Path, rel_path: str) -> ModuleType:
     mod_name = f"_figalign_user_{path.stem}_{abs(hash(path))}"
     spec = importlib.util.spec_from_file_location(mod_name, path)
     if spec is None:
-        raise ImportError(f"import できない: {path}")
+        raise ImportError(f"cannot import: {path}")
     module = importlib.util.module_from_spec(spec)
 
     # Compile the source here rather than calling spec.loader.exec_module().
@@ -87,9 +87,9 @@ def load_callable(root: Path, ref: str) -> Callable[..., Any]:
     try:
         fn = getattr(module, name)
     except AttributeError:
-        raise AttributeError(f"{rel_path} に {name} が無い") from None
+        raise AttributeError(f"{rel_path} has no {name}") from None
     if not callable(fn):
-        raise TypeError(f"{ref} は呼び出せない ({type(fn).__name__})")
+        raise TypeError(f"{ref} is not callable ({type(fn).__name__})")
     return fn
 
 
@@ -104,7 +104,7 @@ def load_data(root: Path, ref: str | None) -> Any:
     rel_path, name = split_ref(ref)
     path = (root / rel_path).resolve()
     if not path.is_file():
-        raise FileNotFoundError(f"ファイルが無い: {path}")
+        raise FileNotFoundError(f"file not found: {path}")
 
     fn = load_callable(root, ref)
     key = (path, name)

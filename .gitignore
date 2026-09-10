@@ -4,3 +4,6 @@ figure-layout-tool-spec.md
 __pycache__/
 *.py[cod]
 *.egg-info/
+
+# uv
+.venv/

@@ -96,7 +96,7 @@ class PanelRenderError(RuntimeError):
         self.panel = panel
         self.original = exc
         self.traceback_text = _user_traceback(exc)
-        super().__init__(f"パネル {panel!r} の描画が失敗した: {exc}")
+        super().__init__(f"panel {panel!r} failed to draw: {exc}")
 
 
 _PKG_DIR = str(Path(__file__).parent)
@@ -231,7 +231,9 @@ def render_svg(
         fig = _draw(fn, data, size, preset, panel, inner_mm)
         FigureCanvasSVG(fig)
         buf = io.StringIO()
-        fig.savefig(buf, format="svg", bbox_inches=None)
+        # Date=None drops the timestamp matplotlib would otherwise write into the metadata,
+        # which is the other thing that makes two identical figures differ.
+        fig.savefig(buf, format="svg", bbox_inches=None, metadata={"Date": None})
     return _set_physical_size(buf.getvalue(), size)
 
 
@@ -326,7 +328,9 @@ def render_pdf(
         fig = _draw(fn, data, size, preset, panel)
         FigureCanvasPdf(fig)
         buf = io.BytesIO()
-        fig.savefig(buf, format="pdf", bbox_inches=None)
+        fig.savefig(
+            buf, format="pdf", bbox_inches=None, metadata={"CreationDate": None}
+        )
     return buf.getvalue()
 
 

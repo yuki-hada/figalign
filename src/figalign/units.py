@@ -27,7 +27,7 @@ def parse_length(value: str | float | int) -> float:
         return float(value)
     m = _LENGTH.match(str(value))
     if m is None:
-        raise UnitError(f"長さとして読めない: {value!r} (例: '89mm', '3.5in', 12)")
+        raise UnitError(f"not a length: {value!r} (e.g. '89mm', '3.5in', 12)")
     number, unit = m.groups()
     return float(number) * _TO_MM[unit or "mm"]
 

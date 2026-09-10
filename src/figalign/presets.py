@@ -27,6 +27,10 @@ class Preset:
             "pdf.fonttype": 42,  # the default Type 3 gets rejected by many journals
             "ps.fonttype": 42,
             "svg.fonttype": "none",  # keep text as <text> for the preview
+            # Without a fixed salt matplotlib names its clip paths and markers from uuid4(),
+            # so the same figure produces a different file on every run. That defeats both
+            # reproducible output and putting an exported SVG under version control.
+            "svg.hashsalt": "figalign",
             # Text
             "font.family": "sans-serif",
             "font.sans-serif": [self.font_family, "Helvetica", "Arial", "DejaVu Sans"],
@@ -76,4 +80,4 @@ def get_preset(name: str | None) -> Preset:
         return PRESETS[name]
     except KeyError:
         known = ", ".join(sorted(PRESETS))
-        raise KeyError(f"未知の preset: {name!r} (使えるもの: {known})") from None
+        raise KeyError(f"unknown preset: {name!r} (available: {known})") from None

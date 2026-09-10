@@ -10,25 +10,25 @@ FORMATS = {".pdf", ".svg", ".png"}
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="figalign", description="論文figureを実寸で並べる")
+    parser = argparse.ArgumentParser(prog="figalign", description="lay out paper figures at true physical size")
     parser.add_argument(
         "root",
         nargs="?",
         default=".",
         type=Path,
-        help="fig.toml があるディレクトリ (既定: カレント)",
+        help="directory holding fig.toml (default: the current one)",
     )
     parser.add_argument(
         "-o",
         "--export",
         type=Path,
         metavar="FILE",
-        help="プレビューを開かずに書き出して終了 (.pdf / .svg / .png)",
+        help="write the figure out and exit instead of serving (.pdf / .svg / .png)",
     )
     parser.add_argument(
         "--keep-text",
         action="store_true",
-        help="PDF出力でテキストをパス化しない (既定はパス化)",
+        help="keep text as text in the PDF instead of outlining it",
     )
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
@@ -36,7 +36,7 @@ def main(argv: list[str] | None = None) -> int:
 
     root: Path = args.root.resolve()
     if not root.is_dir():
-        parser.error(f"ディレクトリが無い: {root}")
+        parser.error(f"not a directory: {root}")
 
     if args.export is not None:
         return _export(root, args.export, keep_text=args.keep_text, parser=parser)
@@ -53,7 +53,7 @@ def _export(
 ) -> int:
     suffix = target.suffix.lower()
     if suffix not in FORMATS:
-        parser.error(f"対応していない形式: {suffix or '(拡張子なし)'} ({', '.join(sorted(FORMATS))})")
+        parser.error(f"unsupported format: {suffix or '(no suffix)'} ({', '.join(sorted(FORMATS))})")
 
     from . import figspec
     from .export import ExportError, to_pdf, to_png
@@ -78,8 +78,8 @@ def _export(
         f"{result.layout.height_mm:.2f} mm, {target.stat().st_size} bytes)"
     )
     if result.errors:
-        print(f"figalign: 描画に失敗したパネル: {', '.join(sorted(result.errors))}", file=sys.stderr)
+        print(f"figalign: panels that failed to draw: {', '.join(sorted(result.errors))}", file=sys.stderr)
         return 1
     if not result.converged:
-        print("figalign: 軸整列が収束しなかった (最大マージンで描画)", file=sys.stderr)
+        print("figalign: axes alignment did not converge; drew with the largest margins seen", file=sys.stderr)
     return 0

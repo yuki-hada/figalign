@@ -26,29 +26,45 @@ def to_pdf(svg: str) -> bytes:
     The root SVG carries its size in mm and a viewBox in the same units, so cairosvg needs
     no scaling hints: the page comes out at exactly the declared size.
     """
-    try:
-        import cairosvg
-    except ImportError as exc:  # pragma: no cover - depends on the install
-        raise ExportError(
-            "PDF出力には cairosvg が必要: micromamba install -c conda-forge cairosvg"
-        ) from exc
-
+    cairosvg = _import_cairosvg()
     try:
         return cairosvg.svg2pdf(bytestring=svg.encode("utf-8"))
     except Exception as exc:
-        raise ExportError(f"PDFへの変換が失敗した: {exc}") from exc
+        raise ExportError(f"conversion to PDF failed: {exc}") from exc
 
 
 def to_png(svg: str, scale: float = 4.0) -> bytes:
     """Raster output. Not a deliverable; useful for eyeballing and for tests."""
-    try:
-        import cairosvg
-    except ImportError as exc:  # pragma: no cover
-        raise ExportError("PNG出力には cairosvg が必要") from exc
+    cairosvg = _import_cairosvg()
     try:
         return cairosvg.svg2png(bytestring=svg.encode("utf-8"), scale=scale)
     except Exception as exc:
-        raise ExportError(f"PNGへの変換が失敗した: {exc}") from exc
+        raise ExportError(f"conversion to PNG failed: {exc}") from exc
+
+
+def _import_cairosvg():
+    """Import cairosvg, telling the two failure modes apart.
+
+    `pip install cairosvg` succeeds on a machine with no cairo at all: cairocffi dlopens
+    libcairo at import time and raises OSError, not ImportError. Distinguishing the two
+    matters because the fix is different -- install the package, or install the C library.
+    """
+    try:
+        import cairosvg
+    except ImportError as exc:
+        raise ExportError(
+            "PDF output needs cairosvg: pip install 'figalign[pdf]' "
+            "(or micromamba install -c conda-forge cairosvg)"
+        ) from exc
+    except OSError as exc:
+        raise ExportError(
+            "cairosvg is installed but its C library (libcairo) is missing. "
+            "pip cannot supply it: install cairo from your system package manager "
+            "(brew install cairo / apt install libcairo2) or use "
+            "micromamba install -c conda-forge cairosvg. "
+            f"Loader said: {exc}"
+        ) from exc
+    return cairosvg
 
 
 def page_size_pt(width_mm: float, height_mm: float) -> tuple[float, float]:

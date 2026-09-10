@@ -69,21 +69,21 @@ class FigSpec:
         try:
             return self.panels[name]
         except KeyError:
-            known = ", ".join(self.panels) or "(なし)"
-            raise SpecError(f"パネル {name!r} は fig.toml に無い (定義済み: {known})") from None
+            known = ", ".join(self.panels) or "(none)"
+            raise SpecError(f"panel {name!r} is not in fig.toml (defined: {known})") from None
 
 
 def load_spec(root: Path) -> FigSpec:
     path = root / FIG_TOML
     if not path.is_file():
-        raise FileNotFoundError(f"{FIG_TOML} が無い: {path}")
+        raise FileNotFoundError(f"{FIG_TOML} not found: {path}")
     try:
         with path.open("rb") as fh:
             raw = tomllib.load(fh)
     except tomllib.TOMLDecodeError as exc:
         # Half-finished TOML is the normal state of a file being edited, so this has to
         # surface as an ordinary message rather than a server error (spec 7.3).
-        raise SpecError(f"{FIG_TOML} の構文エラー: {exc}") from None
+        raise SpecError(f"syntax error in {FIG_TOML}: {exc}") from None
     return build_spec(root, raw)
 
 
@@ -92,21 +92,21 @@ def build_spec(root: Path, raw: dict[str, Any]) -> FigSpec:
 
     panels_raw = raw.get("panels", {})
     if not isinstance(panels_raw, dict):
-        raise SpecError("[panels.*] はテーブルで書く")
+        raise SpecError("[panels.*] must be a table")
 
     panels: dict[str, PanelDef] = {}
     for name, body in panels_raw.items():
         if not isinstance(body, dict):
-            raise SpecError(f"[panels.{name}] はテーブルで書く")
+            raise SpecError(f"[panels.{name}] must be a table")
         fn, src = body.get("fn"), body.get("src")
         if fn and src:
-            raise SpecError(f"[panels.{name}] は fn と src の両方を持てない")
+            raise SpecError(f"[panels.{name}] cannot have both fn and src")
         if not fn and not src:
-            raise SpecError(f"[panels.{name}] に fn か src が必要")
+            raise SpecError(f"[panels.{name}] needs either fn or src")
         panels[name] = PanelDef(name=name, fn=fn, src=src)
 
     if not panels:
-        raise SpecError("パネルが1つも定義されていない")
+        raise SpecError("no panels are defined")
 
     grid, cells = _build_grid(raw, panels)
 
@@ -120,7 +120,7 @@ def build_spec(root: Path, raw: dict[str, Any]) -> FigSpec:
 
     labels = raw.get("labels", True)
     if not isinstance(labels, bool):
-        raise SpecError("labels は true / false で書く")
+        raise SpecError("labels must be true or false")
 
     # Use an explicit `data` when given, otherwise look for load_data() in panels.py.
     data_ref = raw.get("data")
@@ -164,13 +164,13 @@ def _build_grid(
     missing = [n for n in cells if n not in panels]
     if missing:
         raise SpecError(
-            f"grid にあるが [panels.*] に定義が無い: {', '.join(sorted(missing))}"
+            f"in the grid but not defined in [panels.*]: {', '.join(sorted(missing))}"
         )
     unplaced = [n for n in panels if n not in cells]
     if unplaced:
         raise SpecError(
-            f"[panels.*] にあるが grid に置かれていない: {', '.join(unplaced)} "
-            f"(空セルは {EMPTY!r} で書く)"
+            f"defined in [panels.*] but not placed in the grid: {', '.join(unplaced)} "
+            f"(an empty cell is written {EMPTY!r})"
         )
     return grid, cells
 
@@ -189,5 +189,5 @@ def _tracks(raw: dict[str, Any], key: str) -> list[Any] | None:
         return None
     value = raw[key]
     if not isinstance(value, list):
-        raise SpecError(f"{key} は配列で書く (例: [\'1fr\', \'0.7fr\'])")
+        raise SpecError(f"{key} must be an array (e.g. [\'1fr\', \'0.7fr\'])")
     return value

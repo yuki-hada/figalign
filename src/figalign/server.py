@@ -54,7 +54,7 @@ def create_app(root: Path, watch: bool = True) -> FastAPI:
         except UnitError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         if w_mm <= 0 or h_mm <= 0:
-            raise HTTPException(status_code=400, detail="サイズは正の値で指定する")
+            raise HTTPException(status_code=400, detail="size must be positive")
         return PanelSize(w_mm=w_mm, h_mm=h_mm)
 
     def draw(spec: FigSpec, name: str, size: PanelSize, as_pdf: bool):
@@ -63,7 +63,7 @@ def create_app(root: Path, watch: bool = True) -> FastAPI:
             if as_pdf:
                 raise HTTPException(
                     status_code=501,
-                    detail=f"[panels.{name}] は素材SVGなので単体PDF出力の経路が無い",
+                    detail=f"[panels.{name}] is an SVG asset; there is no single-panel PDF route for it",
                 )
             return compose.fit(_read_src(spec, panel.src), size.w_mm, size.h_mm)
         assert panel.fn is not None

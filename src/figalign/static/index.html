@@ -6,20 +6,23 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
 <style>
   :root {
-    --bg: #f5f4f0;
-    --surface: #fffefb;
-    --line: #e4e0d7;
-    --line-soft: #efece4;
-    --text: #3f3d38;
-    --dim: #8c877b;
-    --accent: #6f8fa3;
-    --accent-soft: #eef2f4;
-    --error: #9c5346;
-    --error-bg: #fbf3f1;
-    --error-line: #e6cfc9;
-    --ok: #7a9a72;
-    --warn: #a8804a;
-    --editor-h: 38vh;
+    --bg: #eef1f5;
+    --surface: #fbfcfe;
+    --line: #d3dae3;
+    --line-soft: #e4e9f0;
+    --text: #263241;
+    --dim: #6f7b8a;
+    --accent: #3c7ba8;
+    --accent-soft: #e5eef6;
+    --error: #a63d52;
+    --error-bg: #fbf0f3;
+    --error-line: #e6c6d0;
+    --ok: #3f8a7d;
+    /* The one warm note in the palette, so "not at true size" cannot be mistaken for
+       ordinary chrome. */
+    --warn: #9a6a1f;
+    --shadow: 30, 41, 59;
+    --editor-w: 560px;
   }
   * { box-sizing: border-box; }
   body {
@@ -48,7 +51,7 @@
     color: var(--text);
     background: #fff;
     border: 1px solid var(--line);
-    border-radius: 5px;
+    border-radius: 4px;
     padding: 3px 7px;
   }
   input { width: 74px; }
@@ -56,21 +59,29 @@
   button:hover:not(:disabled) { background: var(--accent-soft); border-color: var(--accent); }
   button:disabled { color: var(--dim); cursor: default; opacity: .6; }
   select:focus, input:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+  header, .bar { border-color: var(--line); }
   a { color: var(--accent); }
   .spacer { flex: 1; }
   [hidden] { display: none !important; }
 
+  #zoom-note { font-size: 12px; color: var(--dim); min-width: 3.4em; }
+  #zoom-note.scaled { color: var(--warn); font-weight: 600; }
   #link { display: inline-flex; align-items: center; gap: 6px; color: var(--dim); font-size: 12px; }
   #link::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--dim); }
   #link.live::before { background: var(--ok); }
   #link.down::before { background: var(--error); }
 
-  main { flex: 1; overflow: auto; display: grid; place-items: center; padding: 32px; }
-  #frame { position: relative; }
+  #split { flex: 1; display: flex; min-height: 0; }
+  main { flex: 1; min-width: 0; overflow: auto; display: flex; padding: 32px; }
+  /* #zoomer carries the scaled footprint so the scrollbars are right; #frame is what gets
+     transformed. An auto margin centres it while it fits and collapses to zero once it
+     overflows, which keeps the left edge reachable. */
+  #zoomer { margin: auto; flex: none; }
+  #frame { position: relative; transform-origin: top left; width: max-content; }
   #stage {
     background: #fff;
     border: 1px solid var(--line-soft);
-    box-shadow: 0 1px 3px rgba(60,55,45,.06), 0 8px 28px rgba(60,55,45,.05);
+    box-shadow: 0 1px 2px rgba(var(--shadow), .07), 0 6px 20px rgba(var(--shadow), .06);
   }
   #stage svg { display: block; }
   #stage.stale { opacity: .55; transition: opacity .12s; }
@@ -80,31 +91,45 @@
     position: absolute;
     pointer-events: none;
     border: 1px solid var(--accent);
-    background: rgba(111,143,163,.10);
+    background: rgba(60, 123, 168, .10);
     transition: all .12s ease-out;
   }
   #highlight.inner { border-style: dashed; background: none; }
 
   /* --- editor --- */
+  /* Code wants height, so the editor takes a full-height column beside the preview
+     rather than a strip underneath it. */
   #editor-pane {
     display: flex;
     flex-direction: column;
-    height: var(--editor-h);
-    border-top: 1px solid var(--line);
+    /* Never grow or shrink: the width is whatever the divider was dragged to. */
+    flex: none;
+    width: var(--editor-w);
+    min-width: 280px;
+    max-width: 80vw;
+    border-right: 1px solid var(--line);
     background: var(--surface);
   }
+  #divider {
+    flex: 0 0 5px;
+    cursor: col-resize;
+    background: var(--line-soft);
+  }
+  #divider:hover, #divider.dragging { background: var(--accent); }
+  body.dragging { cursor: col-resize; user-select: none; }
   #tabs {
     display: flex;
     gap: 2px;
-    padding: 6px 12px 0;
+    padding: 6px 10px 0;
     overflow-x: auto;
+    flex: none;
     background: var(--bg);
     border-bottom: 1px solid var(--line);
   }
   .tab {
     border: 1px solid var(--line);
     border-bottom: none;
-    border-radius: 6px 6px 0 0;
+    border-radius: 5px 5px 0 0;
     background: transparent;
     padding: 4px 11px;
     color: var(--dim);
@@ -118,7 +143,15 @@
     font: 12px/1.6 ui-monospace, Menlo, monospace;
   }
   .CodeMirror { height: 100%; font: 12px/1.6 ui-monospace, Menlo, monospace; }
-  .editor-bar { border-bottom: none; border-top: 1px solid var(--line); font-size: 12px; }
+  .editor-bar {
+    border-bottom: none;
+    border-top: 1px solid var(--line);
+    font-size: 12px;
+    flex: none;
+    gap: 8px;
+    padding: 8px 10px;
+  }
+  .editor-bar button { padding: 3px 6px; }
   .editor-bar .note { color: var(--dim); }
   .editor-bar .note.warn { color: var(--warn); }
 
@@ -132,9 +165,9 @@
     color: var(--error);
     background: var(--error-bg);
     border: 1px solid var(--error-line);
-    border-radius: 7px;
+    border-radius: 6px;
     padding: 12px 14px;
-    box-shadow: 0 6px 24px rgba(60,55,45,.08);
+    box-shadow: 0 6px 20px rgba(var(--shadow), .10);
     z-index: 5;
   }
   #error.on { display: block; }
@@ -155,15 +188,22 @@
     <label>h <input id="h"></label>
   </span>
   <button id="reload">redraw</button>
-  <label>check
-    <select id="filter">
-      <option value="none">colour</option>
-      <option value="grayscale">greyscale</option>
-      <option value="protan">protanopia</option>
-      <option value="deutan">deuteranopia</option>
-      <option value="tritan">tritanopia</option>
-    </select>
-  </label>
+  <select id="zoom" title="Zoom">
+    <option value="fit" selected>fit</option>
+    <option value="0.5">50%</option>
+    <option value="0.75">75%</option>
+    <option value="1">100% true size</option>
+    <option value="1.5">150%</option>
+    <option value="2">200%</option>
+  </select>
+  <span id="zoom-note"></span>
+  <select id="filter" title="Colour check">
+    <option value="none">colour</option>
+    <option value="grayscale">greyscale</option>
+    <option value="protan">protanopia</option>
+    <option value="deutan">deuteranopia</option>
+    <option value="tritan">tritanopia</option>
+  </select>
   <span class="spacer"></span>
   <button id="toggle-editor">editor</button>
   <a id="pdf" href="#" target="_blank">PDF</a>
@@ -171,28 +211,32 @@
   <span id="link">watch</span>
 </header>
 
-<main>
-  <div id="frame">
-    <div id="stage"></div>
-    <div id="highlight" hidden></div>
+<div id="split">
+  <div id="editor-pane">
+    <div id="tabs"></div>
+    <div id="editor-host"><textarea id="editor" spellcheck="false"></textarea></div>
+    <div class="bar editor-bar">
+      <button id="save">save (⌘S)</button>
+      <button id="undo-save">undo</button>
+      <button id="revert">reload</button>
+      <span class="note" id="editor-note"></span>
+      <span class="spacer"></span>
+      <span class="note" id="editor-path"></span>
+    </div>
   </div>
-</main>
-
-<div id="editor-pane">
-  <div id="tabs"></div>
-  <div id="editor-host"><textarea id="editor" spellcheck="false"></textarea></div>
-  <div class="bar editor-bar">
-    <button id="save">save (⌘S)</button>
-    <button id="undo-save">undo save</button>
-    <button id="revert">reload from disk</button>
-    <span class="note" id="editor-note"></span>
-    <span class="spacer"></span>
-    <span class="note" id="editor-path"></span>
-  </div>
+  <div id="divider" title="Drag to resize, double-click to reset"></div>
+  <main>
+    <div id="zoomer">
+      <div id="frame">
+        <div id="stage"></div>
+        <div id="highlight" hidden></div>
+      </div>
+    </div>
+  </main>
 </div>
 
 <pre id="error"><span class="close" id="error-close">×</span><span id="error-body"></span></pre>
-<footer id="status">読み込み中…</footer>
+<footer id="status">loading…</footer>
 
 <!-- Colour-vision simulation. Matrices are the usual dichromat approximations; the point is
      to catch "two series that only differ in hue" before it is printed, not to be clinical. -->
@@ -221,7 +265,7 @@
 <script>
 const $ = (id) => document.getElementById(id);
 const FIGURE = "__figure__";
-const SCOPE_LABEL = { layout: "レイアウト", code: "コード", data: "データ" };
+const SCOPE_LABEL = { layout: "layout", code: "code", data: "data" };
 const MODES = { ".py": "python", ".toml": "toml", ".svg": "xml" };
 
 let spec = null;
@@ -247,7 +291,7 @@ async function loadSpec() {
   const res = await fetch("/api/spec");
   if (!res.ok) {
     showError((await res.json()).detail ?? res.statusText);
-    status("fig.toml を読めない");
+    status("cannot read fig.toml");
     return false;
   }
   const first = spec === null;
@@ -257,7 +301,7 @@ async function loadSpec() {
 
   const keep = $("panel").value;
   $("panel").innerHTML =
-    `<option value="${FIGURE}">figure (合成)</option>` +
+    `<option value="${FIGURE}">figure (composed)</option>` +
     spec.panels.map((p) =>
       `<option value="${p.name}">${spec.labels[p.name] ?? "-"}: ${p.name} — ${p.ref}</option>`).join("");
   if (keep && [...$("panel").options].some((o) => o.value === keep)) $("panel").value = keep;
@@ -381,13 +425,13 @@ function showEditorNote(buf) {
   const note = $("editor-note");
   if (!buf) { note.textContent = ""; return; }
   if (buf.diskDigest !== buf.digest) {
-    note.textContent = "ディスク上で変更されている — reload from disk で読み直し";
+    note.textContent = "changed on disk — use reload to pick it up";
     note.className = "note warn";
   } else if (!buf.clean) {
-    note.textContent = "未保存";
+    note.textContent = "unsaved";
     note.className = "note warn";
   } else {
-    note.textContent = "保存済み";
+    note.textContent = "saved";
     note.className = "note";
   }
 }
@@ -416,7 +460,7 @@ async function save() {
     buf.diskDigest = null;
     showError((await res.json()).detail);
     showEditorNote(buf);
-    status(`保存できない: ${file} が競合`);
+    status(`cannot save: ${file} changed on disk`);
     return;
   }
   if (!res.ok) {
@@ -434,7 +478,7 @@ async function save() {
   paintTabs();
   refreshEditorButtons();
   showEditorNote(buf);
-  status(`保存: ${file}`);
+  status(`saved ${file}`);
   // The watcher will notice and push a change; the redraw happens from there.
 }
 
@@ -449,7 +493,7 @@ async function undoSave() {
   }
   const state = await res.json();
   applyDisk(file, state);
-  status(`一つ前の保存に戻した: ${file}`);
+  status(`reverted ${file} to the previous save`);
 }
 
 async function revert() {
@@ -459,7 +503,7 @@ async function revert() {
   const res = await fetch(`/api/file?path=${encodeURIComponent(file)}`);
   if (!res.ok) return;
   applyDisk(file, await res.json());
-  status(`ディスクから読み直した: ${file}`);
+  status(`reloaded ${file} from disk`);
 }
 
 function applyDisk(file, state) {
@@ -519,6 +563,62 @@ function highlightPanel(name) {
   box.hidden = false;
 }
 
+/* ---------- zoom ----------
+   True size is the point of the tool, so scaling is never silent: the effective percentage
+   is always on screen and turns amber as soon as it is not 100%. `fit` only ever shrinks --
+   enlarging a figure you are about to judge line weights on would be actively misleading. */
+
+const PX_PER_MM = 96 / 25.4;
+
+/* The natural size comes from the mm the SVG itself declares, not from the laid-out box.
+   #frame is a block inside #zoomer, and #zoomer's width is what the previous call set to
+   natural x scale -- so measuring the box would feed the scale back into its own input and
+   the figure would shrink a little more on every call. */
+function naturalSize() {
+  const svg = $("stage").querySelector("svg");
+  if (!svg) return null;
+  const w = parseFloat(svg.getAttribute("width"));
+  const h = parseFloat(svg.getAttribute("height"));
+  if (!(w > 0) || !(h > 0)) return null;
+  return { w: w * PX_PER_MM, h: h * PX_PER_MM };
+}
+
+function applyZoom() {
+  const natural = naturalSize();
+  if (!natural) return;
+  const frame = $("frame");
+  const zoomer = $("zoomer");
+  const main = frame.closest("main");
+
+  // clientWidth includes the padding, so take it from the computed style rather than
+  // repeating the number here.
+  const pad = getComputedStyle(main);
+  const mode = $("zoom").value;
+  const room = {
+    w: main.clientWidth - parseFloat(pad.paddingLeft) - parseFloat(pad.paddingRight),
+    h: main.clientHeight - parseFloat(pad.paddingTop) - parseFloat(pad.paddingBottom),
+  };
+  const fitScale = Math.min(1, room.w / natural.w, room.h / natural.h);
+  const scale = Math.max(mode === "fit" ? fitScale : Number(mode), 0.05);
+
+  frame.style.width = `${natural.w}px`;
+  frame.style.height = `${natural.h}px`;
+  frame.style.transform = scale === 1 ? "" : `scale(${scale})`;
+  zoomer.style.width = `${natural.w * scale}px`;
+  zoomer.style.height = `${natural.h * scale}px`;
+
+  const percent = Math.round(scale * 100);
+  const note = $("zoom-note");
+  note.textContent = `${percent}%`;
+  note.classList.toggle("scaled", percent !== 100);
+  note.title =
+    (percent === 100
+      ? "true size"
+      : "not true size — judge line weights and type sizes at 100%") +
+    `\nfigure ${Math.round(natural.w)}x${Math.round(natural.h)}px / room ${Math.round(room.w)}x${Math.round(room.h)}px` +
+    `\nfit would be ${Math.round(fitScale * 100)}%`;
+}
+
 function applyFilter() {
   const mode = $("filter").value;
   const stage = $("stage");
@@ -545,7 +645,7 @@ async function draw(note = "") {
   } catch (err) {
     $("stage").classList.remove("stale");
     drawing = false;
-    status(`サーバーに繋がらない: ${err}`);
+    status(`server unreachable: ${err}`);
     return;
   }
   const ms = Math.round(performance.now() - t0);
@@ -556,20 +656,24 @@ async function draw(note = "") {
     // spec 7.2: drop the output SVG straight into the DOM
     $("stage").innerHTML = body;
     applyFilter();
+    applyZoom();
     highlightPanel(active?.panel ?? null);
     const failed = (res.headers.get("X-Figalign-Errors") || "").split(",").filter(Boolean);
     if (failed.length) {
-      showError(`描画に失敗したパネル: ${failed.join(", ")}\n(該当セルにトレースバックを表示)`);
+      showError(`panels that failed to draw: ${failed.join(", ")}\n(traceback is shown in the cell)`);
     }
     const passes = res.headers.get("X-Figalign-Passes");
     const conv = res.headers.get("X-Figalign-Converged");
-    const align = figure && passes ? ` — 整列${passes}パス${conv === "0" ? " (未収束)" : ""}` : "";
-    status(`${figure ? "figure" : name} — ${ms}ms — 実寸表示${align}${note}`);
+    const align =
+      figure && passes
+        ? ` — aligned in ${passes} pass${passes === "1" ? "" : "es"}${conv === "0" ? ", not converged" : ""}`
+        : "";
+    status(`${figure ? "figure" : name} — ${ms}ms${align}${note}`);
   } else {
     let detail = body;
     try { detail = JSON.parse(body).detail ?? body; } catch (_) {}
     showError(detail);
-    status(`失敗: ${figure ? "figure" : name} — ${ms}ms${note}`);
+    status(`failed: ${figure ? "figure" : name} — ${ms}ms${note}`);
   }
   drawing = false;
   if (pending) { pending = false; draw(note); }
@@ -589,7 +693,7 @@ function connect(delay = 500) {
     if (msg.kind !== "change") return;
     await syncFromDisk(msg.paths);
     const label = SCOPE_LABEL[msg.scope] ?? msg.scope;
-    if (await loadSpec()) draw(` — ${label}の変更を反映 (${msg.paths.join(", ")})`);
+    if (await loadSpec()) draw(` — ${label} change picked up (${msg.paths.join(", ")})`);
   });
   socket.addEventListener("close", () => {
     $("link").textContent = "reconnecting";
@@ -604,7 +708,9 @@ function connect(delay = 500) {
 if (window.CodeMirror) {
   cm = CodeMirror.fromTextArea($("editor"), {
     lineNumbers: true,
-    lineWrapping: false,
+    // The column is deliberately narrow so the preview keeps room for true size; without
+    // wrapping, ordinary Python lines would need constant horizontal scrolling.
+    lineWrapping: true,
     indentUnit: 4,
     // No LSP, no completion: this is for nudging an axis range while watching the preview
     // (spec 4, 7.1).
@@ -614,19 +720,69 @@ if (window.CodeMirror) {
 } else {
   // The CDN is unreachable. A plain textarea still edits files, which is the point.
   $("editor").addEventListener("input", markDirty);
-  status("CodeMirror を読めなかったので素のテキストエリアで編集します");
+  status("CodeMirror unavailable — editing in a plain textarea");
 }
 
 $("panel").addEventListener("change", () => { draw(); highlightPanel(active?.panel ?? null); });
 $("reload").addEventListener("click", () => draw());
 $("filter").addEventListener("change", applyFilter);
+$("zoom").addEventListener("change", applyZoom);
+window.addEventListener("resize", applyZoom);
 $("save").addEventListener("click", save);
 $("undo-save").addEventListener("click", undoSave);
 $("revert").addEventListener("click", revert);
+/* ---------- split ---------- */
+
+const WIDTH_KEY = "figalign.editorWidth";
+
+function setEditorWidth(px) {
+  const max = Math.max(window.innerWidth - 360, 320);
+  const width = Math.min(Math.max(px, 280), max);
+  document.documentElement.style.setProperty("--editor-w", `${width}px`);
+  localStorage.setItem(WIDTH_KEY, String(width));
+  if (cm) cm.refresh();
+  applyZoom();
+}
+
+/* Default so the preview column still fits the figure at true size: 1mm is 96/25.4 CSS px,
+   plus the padding around the stage. */
+function defaultEditorWidth() {
+  const stored = Number(localStorage.getItem(WIDTH_KEY));
+  if (stored) return stored;
+  const figureMm = spec?.figure?.width_mm ?? spec?.preset?.width_mm ?? 180;
+  const needed = figureMm * 96 / 25.4 + 80;
+  return Math.max(window.innerWidth - needed, 380);
+}
+
+$("divider").addEventListener("mousedown", (event) => {
+  event.preventDefault();
+  const startX = event.clientX;
+  const startWidth = $("editor-pane").getBoundingClientRect().width;
+  $("divider").classList.add("dragging");
+  document.body.classList.add("dragging");
+
+  const move = (e) => setEditorWidth(startWidth + (e.clientX - startX));
+  const done = () => {
+    $("divider").classList.remove("dragging");
+    document.body.classList.remove("dragging");
+    window.removeEventListener("mousemove", move);
+    window.removeEventListener("mouseup", done);
+  };
+  window.addEventListener("mousemove", move);
+  window.addEventListener("mouseup", done);
+});
+
+$("divider").addEventListener("dblclick", () => {
+  localStorage.removeItem(WIDTH_KEY);
+  setEditorWidth(defaultEditorWidth());
+});
+
 $("toggle-editor").addEventListener("click", () => {
-  const pane = $("editor-pane");
-  pane.hidden = !pane.hidden;
-  if (!pane.hidden && cm) cm.refresh();
+  const hidden = !$("editor-pane").hidden;
+  $("editor-pane").hidden = hidden;
+  $("divider").hidden = hidden;
+  if (!hidden && cm) cm.refresh();
+  applyZoom();
 });
 for (const id of ["w", "h"]) {
   $(id).addEventListener("keydown", (e) => { if (e.key === "Enter") draw(); });
@@ -635,7 +791,11 @@ window.addEventListener("keydown", (e) => {
   if ((e.metaKey || e.ctrlKey) && e.key === "s") { e.preventDefault(); save(); }
 });
 
-loadSpec().then((ok) => { if (ok) draw(); connect(); });
+loadSpec().then((ok) => {
+  setEditorWidth(defaultEditorWidth());
+  if (ok) draw();
+  connect();
+});
 </script>
 </body>
 </html>
