@@ -134,7 +134,7 @@ def scatter_main(ax, data, size):
 The two formats are not the same output twice:
 
 - **SVG keeps its text as text.** It stays small and can be opened in Illustrator, which is
-  what makes it the preview format (spec 9).
+  what makes it the preview format.
 - **PDF outlines the text first**, in matplotlib, before cairosvg sees the file. Otherwise
   two engines lay out the same figure -- matplotlib for the preview, cairo for the PDF --
   and they do not agree glyph for glyph; cairo also resolves the font itself, so a machine
@@ -149,7 +149,7 @@ one pixel of where the solver placed it.
 
 Rendering panels independently leaves their frames out of line, because the margin outside
 a frame is mostly tick labels and those differ in width. figalign solves for the frames
-instead of the cells (spec 5.2):
+instead of the cells:
 
 1. draw each panel once and measure `ax.get_tightbbox()` against `ax.get_position()`
 2. solve so that the *inner* boxes -- the frames -- share coordinates down a column
@@ -169,8 +169,8 @@ Two consequences worth knowing:
   widths whatever their tick labels look like. A fixed `"30mm"` track also means a 30mm
   frame. The figure grows around them, so a given `row_heights` yields a taller figure than
   outer-cell layout would. Set `height` to pin the total instead.
-- **`gap` is a floor.** It is the frame-to-frame distance and the labels live inside it
-  (spec 6.3), so where facing margins need more than `gap`, the spacing grows to fit them.
+- **`gap` is a floor.** It is the frame-to-frame distance and the labels live inside it,
+  so where facing margins need more than `gap`, the spacing grows to fit them.
   Below that threshold `gap` has no effect; above it, it takes over.
 
 ## The window
@@ -201,14 +201,14 @@ A tab is a *view* of a file, not a slice of one. Several panels normally live in
 `panels.py`, so those tabs share a single buffer and the tab only decides where to scroll --
 with a buffer per tab, saving from one would throw away what was typed in another. The editor
 is CodeMirror loaded from a CDN, with no LSP and no completion, because it exists for
-nudging an axis range while watching the figure (spec 4, 7.1). If the CDN is unreachable it
+nudging an axis range while watching the figure. If the CDN is unreachable it
 falls back to a plain textarea, which still edits files.
 
 Saving is explicit (⌘S). A dev server does not save your files for you; your editor does.
 
 Nothing about saving is special-cased: the write lands on disk, the watcher notices, and
 every connected preview redraws. An edit made here and an edit made in VS Code are the same
-event (spec 3.4). Two consequences of taking that seriously:
+event. Two consequences of taking that seriously:
 
 - **Writes carry a precondition.** The editor sends the digest it last read; if the file
   changed underneath, the server answers 409 and the buffer is kept. Losing what you typed
@@ -221,8 +221,8 @@ event (spec 3.4). Two consequences of taking that seriously:
 Lines wrap: the column is deliberately narrow so the preview keeps its room, and ordinary
 Python lines would otherwise need constant horizontal scrolling.
 
-`undo` steps back through whole-file snapshots (spec 7.2 -- it is text, so nothing
-cleverer is needed). They live in the server's memory and are **lost when it restarts**.
+`undo` steps back through whole-file snapshots -- they are text, so nothing cleverer is
+needed. They live in the server's memory and are **lost when it restarts**.
 
 ## Checking before you print
 
@@ -270,7 +270,7 @@ Progress against the roadmap.
 The preset is shown read-only in the header and changed by editing `fig.toml` in the layout
 tab. There is deliberately no preset dropdown: writing the setting back would mean rewriting
 TOML programmatically, which loses the comments and formatting in the file the user owns.
-Editing the declaration directly is the same principle as not generating code (spec 3.4).
+Editing the declaration directly is the same principle as not generating code.
 
 Still open: colorbars and shared axes (one panel is still one axes), and the `align_x` /
 `align_y` opt-out for panels that should *not* be aligned.
