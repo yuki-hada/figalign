@@ -9,13 +9,14 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import Body, FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, Response
 
-from . import compose, figspec, loader
+from . import compose, figspec, files, loader
 from .export import ExportError, to_pdf
 from .figure import _read_src, build_figure, resolve
-from .figspec import FigSpec, SpecError
+from .figspec import FIG_TOML, FigSpec, SpecError
+from .files import ConflictError, FileAccessError
 from .grid import GridError
 from .layout import solve_layout
 from .render import PanelRenderError, PanelSize, cache_stats, render_pdf, render_svg
@@ -99,16 +100,8 @@ def create_app(root: Path, watch: bool = True) -> FastAPI:
                 "passes": resolved.passes,
                 "converged": resolved.converged,
             },
-            "panels": [
-                {
-                    "name": name,
-                    "kind": spec.panels[name].kind,
-                    "ref": spec.panels[name].fn or spec.panels[name].src,
-                    "box": vars(layout.boxes[name]),
-                    "inner": vars(layout.inner_box(name)),
-                }
-                for name in spec.order
-            ],
+            "panels": [_panel_info(spec, layout, name) for name in spec.order],
+            "files": _editable_files(spec),
         }
 
     @app.websocket("/ws")
@@ -130,6 +123,39 @@ def create_app(root: Path, watch: bool = True) -> FastAPI:
     @app.get("/api/stats")
     def api_stats() -> dict:
         return {"clients": len(hub), "render_cache": cache_stats()}
+
+    @app.get("/api/file")
+    def api_file_read(path: str = Query(...)) -> dict:
+        try:
+            return vars(files.read(root, path))
+        except FileAccessError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.put("/api/file")
+    def api_file_write(
+        path: str = Query(...),
+        text: str = Body(..., embed=True),
+        if_match: str | None = Body(default=None, embed=True),
+    ) -> dict:
+        """Write a file. The watcher picks it up and every preview reloads."""
+        try:
+            return vars(files.write(root, path, text, if_match))
+        except FileAccessError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except ConflictError as exc:
+            # 409 so the editor can offer to reload instead of overwriting silently
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except OSError as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    @app.post("/api/file/undo")
+    def api_file_undo(path: str = Query(...)) -> dict:
+        try:
+            return vars(files.undo(root, path))
+        except FileAccessError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.get("/api/figure.svg")
     def api_figure() -> Response:
@@ -209,6 +235,47 @@ def create_app(root: Path, watch: bool = True) -> FastAPI:
         )
 
     return app
+
+
+def _panel_info(spec: FigSpec, layout, name: str) -> dict:
+    panel = spec.panels[name]
+    info: dict[str, object] = {
+        "name": name,
+        "kind": panel.kind,
+        "ref": panel.fn or panel.src,
+        "box": vars(layout.boxes[name]),
+        "inner": vars(layout.inner_box(name)),
+    }
+    if panel.fn:
+        file, _, fn_name = panel.fn.partition(":")
+        info["file"] = file
+        info["line"] = files.definition_line(spec.root, file, fn_name)
+    else:
+        info["file"] = panel.src
+        info["line"] = None
+    return info
+
+
+def _editable_files(spec: FigSpec) -> list[dict]:
+    """Every file the tabs can open: the declaration, the panel modules, the assets."""
+    seen: list[str] = [FIG_TOML]
+    for panel in spec.panels.values():
+        target = panel.fn.partition(":")[0] if panel.fn else panel.src
+        if target and target not in seen:
+            seen.append(target)
+    if spec.data_ref:
+        module = spec.data_ref.partition(":")[0]
+        if module not in seen:
+            seen.append(module)
+
+    out = []
+    for rel in seen:
+        try:
+            state = files.read(spec.root, rel)
+        except (FileAccessError, FileNotFoundError):
+            continue
+        out.append({"path": rel, "digest": state.digest, "lines": state.text.count("\n") + 1})
+    return out
 
 
 def serve(root: Path, host: str = "127.0.0.1", port: int = 8765) -> None:

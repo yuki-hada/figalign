@@ -133,6 +133,44 @@ Two consequences worth knowing:
   (spec 6.3), so where facing margins need more than `gap`, the spacing grows to fit them.
   Below that threshold `gap` has no effect; above it, it takes over.
 
+## Editing in the browser
+
+The preview pane sits above a tab strip: `data`, one tab per panel, then `layout`.
+
+A tab is a *view* of a file, not a slice of one. Several panels normally live in the same
+`panels.py`, so those tabs share a single buffer and the tab only decides where to scroll --
+with a buffer per tab, saving from one would throw away what was typed in another. The editor
+is CodeMirror loaded from a CDN, with no LSP and no completion, because it exists for
+nudging an axis range while watching the figure (spec 4, 7.1). If the CDN is unreachable it
+falls back to a plain textarea, which still edits files.
+
+Saving is explicit (⌘S). A dev server does not save your files for you; your editor does.
+
+Nothing about saving is special-cased: the write lands on disk, the watcher notices, and
+every connected preview redraws. An edit made here and an edit made in VS Code are the same
+event (spec 3.4). Two consequences of taking that seriously:
+
+- **Writes carry a precondition.** The editor sends the digest it last read; if the file
+  changed underneath, the server answers 409 and the buffer is kept. Losing what you typed
+  is worse than a stale file, and silently overwriting someone else's edit is worse than
+  both.
+- **Paths are validated, not trusted.** `..`, absolute paths, symlinks pointing outside the
+  project, and anything that is not `.py` / `.toml` / `.svg` are refused. The server binds
+  to localhost by default but `--host` can expose it.
+
+`undo save` steps back through whole-file snapshots (spec 7.2 -- it is text, so nothing
+cleverer is needed). They live in the server's memory and are **lost when it restarts**.
+
+## Checking before you print
+
+The `check` selector filters the preview: greyscale, and protanopia / deuteranopia /
+tritanopia via `feColorMatrix`. It is there to catch "these two series only differ in hue"
+before the figure is printed rather than after. The matrices preserve luminance, so a pair
+that stays distinct under them is distinct for the reason you think it is.
+
+Switching to a panel tab outlines that panel's axes frame in the preview. The preview is
+rendered at true size, so an overlay positioned in mm lands exactly on the solved box.
+
 ## Live reload
 
 Editing `fig.toml` or `panels.py` on disk updates the preview. Editing in VS Code and
@@ -164,12 +202,12 @@ Progress against the roadmap.
 - [x] 3. watch + WebSocket + live preview
 - [x] 4. Axes frame alignment (two-pass) — the core feature
 - [x] PDF export (composed figure, out of roadmap order: it is the deliverable)
-- [ ] 5. Tab UI, journal presets, greyscale check
+- [x] 5. Tab UI, journal presets, greyscale check
 
-Decided for step 5, not yet built: a panel tab shows the whole file rather than a slice of
-it, and undo snapshots live in memory (so they are lost on restart). Writing from the UI
-needs a save endpoint with path validation and an `If-Match` precondition, so that a buffer
-cannot silently overwrite an edit made in another editor.
+The preset is shown read-only in the header and changed by editing `fig.toml` in the layout
+tab. There is deliberately no preset dropdown: writing the setting back would mean rewriting
+TOML programmatically, which loses the comments and formatting in the file the user owns.
+Editing the declaration directly is the same principle as not generating code (spec 3.4).
 
 Still open: colorbars and shared axes (one panel is still one axes), and the `align_x` /
 `align_y` opt-out for panels that should *not* be aligned.

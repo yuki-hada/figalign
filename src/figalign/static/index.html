@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>figalign</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
 <style>
   :root {
     --bg: #f5f4f0;
@@ -17,6 +18,8 @@
     --error-bg: #fbf3f1;
     --error-line: #e6cfc9;
     --ok: #7a9a72;
+    --warn: #a8804a;
+    --editor-h: 38vh;
   }
   * { box-sizing: border-box; }
   body {
@@ -28,16 +31,16 @@
     flex-direction: column;
     height: 100vh;
   }
-  header {
+  header, .bar {
     display: flex;
     align-items: center;
-    gap: 14px;
-    padding: 9px 16px;
+    gap: 12px;
+    padding: 8px 16px;
     background: var(--surface);
     border-bottom: 1px solid var(--line);
     flex-wrap: wrap;
   }
-  .brand { font-weight: 600; letter-spacing: .01em; }
+  .brand { font-weight: 600; }
   .brand small { color: var(--dim); font-weight: 400; margin-left: 8px; }
   label { color: var(--dim); }
   select, input, button {
@@ -50,35 +53,20 @@
   }
   input { width: 74px; }
   button { cursor: pointer; }
-  button:hover { background: var(--accent-soft); border-color: var(--accent); }
+  button:hover:not(:disabled) { background: var(--accent-soft); border-color: var(--accent); }
+  button:disabled { color: var(--dim); cursor: default; opacity: .6; }
   select:focus, input:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
   a { color: var(--accent); }
   .spacer { flex: 1; }
-  #size-fields[hidden] { display: none; }
+  [hidden] { display: none !important; }
 
-  #link {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    color: var(--dim);
-    font-size: 12px;
-  }
-  #link::before {
-    content: "";
-    width: 7px; height: 7px;
-    border-radius: 50%;
-    background: var(--dim);
-  }
+  #link { display: inline-flex; align-items: center; gap: 6px; color: var(--dim); font-size: 12px; }
+  #link::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--dim); }
   #link.live::before { background: var(--ok); }
   #link.down::before { background: var(--error); }
 
-  main {
-    flex: 1;
-    overflow: auto;
-    display: grid;
-    place-items: center;
-    padding: 36px;
-  }
+  main { flex: 1; overflow: auto; display: grid; place-items: center; padding: 32px; }
+  #frame { position: relative; }
   #stage {
     background: #fff;
     border: 1px solid var(--line-soft);
@@ -86,13 +74,59 @@
   }
   #stage svg { display: block; }
   #stage.stale { opacity: .55; transition: opacity .12s; }
+  /* The preview is rendered at true size, so an overlay positioned in mm lands exactly
+     on the box the solver computed. */
+  #highlight {
+    position: absolute;
+    pointer-events: none;
+    border: 1px solid var(--accent);
+    background: rgba(111,143,163,.10);
+    transition: all .12s ease-out;
+  }
+  #highlight.inner { border-style: dashed; background: none; }
+
+  /* --- editor --- */
+  #editor-pane {
+    display: flex;
+    flex-direction: column;
+    height: var(--editor-h);
+    border-top: 1px solid var(--line);
+    background: var(--surface);
+  }
+  #tabs {
+    display: flex;
+    gap: 2px;
+    padding: 6px 12px 0;
+    overflow-x: auto;
+    background: var(--bg);
+    border-bottom: 1px solid var(--line);
+  }
+  .tab {
+    border: 1px solid var(--line);
+    border-bottom: none;
+    border-radius: 6px 6px 0 0;
+    background: transparent;
+    padding: 4px 11px;
+    color: var(--dim);
+    white-space: nowrap;
+  }
+  .tab.on { background: var(--surface); color: var(--text); font-weight: 600; }
+  .tab .dot { color: var(--warn); margin-left: 5px; }
+  #editor-host { flex: 1; overflow: hidden; position: relative; }
+  #editor-host textarea {
+    width: 100%; height: 100%; border: 0; padding: 10px 12px; resize: none;
+    font: 12px/1.6 ui-monospace, Menlo, monospace;
+  }
+  .CodeMirror { height: 100%; font: 12px/1.6 ui-monospace, Menlo, monospace; }
+  .editor-bar { border-bottom: none; border-top: 1px solid var(--line); font-size: 12px; }
+  .editor-bar .note { color: var(--dim); }
+  .editor-bar .note.warn { color: var(--warn); }
 
   #error {
     display: none;
     position: fixed;
     left: 16px; right: 16px; bottom: 34px;
-    max-height: 42vh;
-    overflow: auto;
+    max-height: 38vh; overflow: auto;
     white-space: pre-wrap;
     font: 12px/1.5 ui-monospace, Menlo, monospace;
     color: var(--error);
@@ -101,21 +135,14 @@
     border-radius: 7px;
     padding: 12px 14px;
     box-shadow: 0 6px 24px rgba(60,55,45,.08);
+    z-index: 5;
   }
   #error.on { display: block; }
-  #error .close {
-    float: right;
-    color: var(--dim);
-    cursor: pointer;
-    padding: 0 4px;
-  }
+  #error .close { float: right; color: var(--dim); cursor: pointer; padding: 0 4px; }
 
   footer {
-    padding: 5px 16px;
-    color: var(--dim);
-    background: var(--surface);
-    border-top: 1px solid var(--line);
-    font-size: 12px;
+    padding: 5px 16px; color: var(--dim); background: var(--surface);
+    border-top: 1px solid var(--line); font-size: 12px;
   }
 </style>
 </head>
@@ -124,41 +151,97 @@
   <span class="brand">figalign<small id="preset"></small></span>
   <label>view <select id="panel"></select></label>
   <span id="size-fields">
-    <label>w <input id="w" value=""></label>
-    <label>h <input id="h" value=""></label>
+    <label>w <input id="w"></label>
+    <label>h <input id="h"></label>
   </span>
   <button id="reload">redraw</button>
+  <label>check
+    <select id="filter">
+      <option value="none">colour</option>
+      <option value="grayscale">greyscale</option>
+      <option value="protan">protanopia</option>
+      <option value="deutan">deuteranopia</option>
+      <option value="tritan">tritanopia</option>
+    </select>
+  </label>
   <span class="spacer"></span>
+  <button id="toggle-editor">editor</button>
   <a id="pdf" href="#" target="_blank">PDF</a>
   <a id="svg" href="/api/figure.svg" target="_blank">SVG</a>
   <span id="link">watch</span>
 </header>
 
 <main>
-  <div id="stage"></div>
+  <div id="frame">
+    <div id="stage"></div>
+    <div id="highlight" hidden></div>
+  </div>
 </main>
+
+<div id="editor-pane">
+  <div id="tabs"></div>
+  <div id="editor-host"><textarea id="editor" spellcheck="false"></textarea></div>
+  <div class="bar editor-bar">
+    <button id="save">save (⌘S)</button>
+    <button id="undo-save">undo save</button>
+    <button id="revert">reload from disk</button>
+    <span class="note" id="editor-note"></span>
+    <span class="spacer"></span>
+    <span class="note" id="editor-path"></span>
+  </div>
+</div>
 
 <pre id="error"><span class="close" id="error-close">×</span><span id="error-body"></span></pre>
 <footer id="status">読み込み中…</footer>
 
+<!-- Colour-vision simulation. Matrices are the usual dichromat approximations; the point is
+     to catch "two series that only differ in hue" before it is printed, not to be clinical. -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <filter id="protan"><feColorMatrix type="matrix" values="
+    0.567 0.433 0     0 0
+    0.558 0.442 0     0 0
+    0     0.242 0.758 0 0
+    0     0     0     1 0"/></filter>
+  <filter id="deutan"><feColorMatrix type="matrix" values="
+    0.625 0.375 0   0 0
+    0.700 0.300 0   0 0
+    0     0.300 0.7 0 0
+    0     0     0   1 0"/></filter>
+  <filter id="tritan"><feColorMatrix type="matrix" values="
+    0.950 0.050 0     0 0
+    0     0.433 0.567 0 0
+    0     0.475 0.525 0 0
+    0     0     0     1 0"/></filter>
+</defs></svg>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/python/python.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/toml/toml.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/xml/xml.min.js"></script>
 <script>
 const $ = (id) => document.getElementById(id);
 const FIGURE = "__figure__";
 const SCOPE_LABEL = { layout: "レイアウト", code: "コード", data: "データ" };
+const MODES = { ".py": "python", ".toml": "toml", ".svg": "xml" };
+
 let spec = null;
 let drawing = false;
 let pending = false;
+let tabs = [];          // { key, title, file, line }
+let active = null;      // the current tab
+const buffers = new Map();  // file -> { doc, digest, clean, diskDigest }
+let cm = null;          // CodeMirror instance, or null when falling back to the textarea
 
 function status(text) { $("status").textContent = text; }
-
 function showError(text) {
   // Never blank the preview: the last good render stays under the banner (spec 7.3).
   $("error-body").textContent = text;
   $("error").classList.add("on");
 }
 function clearError() { $("error").classList.remove("on"); }
-
 $("error-close").addEventListener("click", clearError);
+
+/* ---------- metadata ---------- */
 
 async function loadSpec() {
   const res = await fetch("/api/spec");
@@ -167,27 +250,281 @@ async function loadSpec() {
     status("fig.toml を読めない");
     return false;
   }
-  const next = await res.json();
   const first = spec === null;
-  spec = next;
+  spec = await res.json();
   $("preset").textContent =
     `${spec.preset.name} / ${spec.figure.width_mm.toFixed(1)}×${spec.figure.height_mm.toFixed(1)}mm / ${spec.preset.font_size_pt}pt`;
 
   const keep = $("panel").value;
   $("panel").innerHTML =
     `<option value="${FIGURE}">figure (合成)</option>` +
-    spec.panels
-      .map((p) => `<option value="${p.name}">${spec.labels[p.name] ?? "-"}: ${p.name} — ${p.ref}</option>`)
-      .join("");
+    spec.panels.map((p) =>
+      `<option value="${p.name}">${spec.labels[p.name] ?? "-"}: ${p.name} — ${p.ref}</option>`).join("");
   if (keep && [...$("panel").options].some((o) => o.value === keep)) $("panel").value = keep;
   if (first) {
     $("w").value = `${spec.preset.width_mm}mm`;
     $("h").value = `${spec.default_height_mm}mm`;
   }
+  buildTabs(first);
   return true;
 }
 
+/* ---------- tabs ----------
+   One tab per panel, as in spec 7.1, plus data and layout. A tab is a *view* of a file:
+   several panels usually live in the same panels.py, so they share one buffer and the tab
+   only decides where to scroll. Sharing matters -- with a buffer per tab, saving from one
+   would discard what was typed in another. */
+
+function buildTabs(first) {
+  const dataFile = spec.data_ref ? spec.data_ref.split(":")[0] : null;
+  const dataName = spec.data_ref ? spec.data_ref.split(":")[1] : null;
+  tabs = [];
+  if (dataFile) tabs.push({ key: "data", title: "data", file: dataFile, name: dataName });
+  for (const p of spec.panels) {
+    tabs.push({
+      key: `panel:${p.name}`,
+      title: `${spec.labels[p.name] ?? p.name}: ${p.name}`,
+      file: p.file,
+      line: p.line,
+      panel: p.name,
+    });
+  }
+  tabs.push({ key: "layout", title: "layout", file: "fig.toml" });
+
+  $("tabs").innerHTML = tabs.map((t) =>
+    `<button class="tab" data-key="${t.key}">${t.title}<span class="dot" hidden>•</span></button>`).join("");
+  for (const el of $("tabs").children) {
+    el.addEventListener("click", () => selectTab(el.dataset.key));
+  }
+  if (first || !tabs.some((t) => t.key === active?.key)) selectTab("layout");
+  else paintTabs();
+}
+
+function paintTabs() {
+  for (const el of $("tabs").children) {
+    const tab = tabs.find((t) => t.key === el.dataset.key);
+    el.classList.toggle("on", tab.key === active?.key);
+    const buf = buffers.get(tab.file);
+    el.querySelector(".dot").hidden = !buf || buf.clean;
+  }
+}
+
+async function selectTab(key) {
+  const tab = tabs.find((t) => t.key === key);
+  if (!tab) return;
+  active = tab;
+  await openFile(tab.file);
+  if (cm) {
+    const line = tab.line ? tab.line - 1 : 0;
+    cm.setCursor({ line, ch: 0 });
+    cm.scrollIntoView({ line: Math.max(line - 2, 0), ch: 0 }, 40);
+    cm.focus();
+  }
+  $("editor-path").textContent = tab.line ? `${tab.file}:${tab.line}` : tab.file;
+  paintTabs();
+  highlightPanel(tab.panel ?? null);
+  refreshEditorButtons();
+}
+
+/* ---------- buffers ---------- */
+
+function modeFor(file) {
+  const dot = file.lastIndexOf(".");
+  return MODES[file.slice(dot)] ?? null;
+}
+
+async function openFile(file) {
+  let buf = buffers.get(file);
+  if (!buf) {
+    const res = await fetch(`/api/file?path=${encodeURIComponent(file)}`);
+    if (!res.ok) {
+      showError((await res.json()).detail ?? res.statusText);
+      return;
+    }
+    const state = await res.json();
+    buf = {
+      digest: state.digest,
+      diskDigest: state.digest,
+      clean: true,
+      undoDepth: state.undo_depth,
+      text: state.text,
+    };
+    if (cm) {
+      buf.doc = CodeMirror.Doc(state.text, modeFor(file));
+      buf.generation = buf.doc.changeGeneration(true);
+    }
+    buffers.set(file, buf);
+  }
+  if (cm) cm.swapDoc(buf.doc);
+  else $("editor").value = buf.text;
+  showEditorNote(buf);
+}
+
+function currentBuffer() { return active ? buffers.get(active.file) : null; }
+
+function currentText() {
+  const buf = currentBuffer();
+  if (!buf) return "";
+  return cm ? buf.doc.getValue() : $("editor").value;
+}
+
+function markDirty() {
+  const buf = currentBuffer();
+  if (!buf) return;
+  buf.clean = cm ? buf.doc.isClean(buf.generation) : buf.text === $("editor").value;
+  paintTabs();
+  refreshEditorButtons();
+  showEditorNote(buf);
+}
+
+function showEditorNote(buf) {
+  const note = $("editor-note");
+  if (!buf) { note.textContent = ""; return; }
+  if (buf.diskDigest !== buf.digest) {
+    note.textContent = "ディスク上で変更されている — reload from disk で読み直し";
+    note.className = "note warn";
+  } else if (!buf.clean) {
+    note.textContent = "未保存";
+    note.className = "note warn";
+  } else {
+    note.textContent = "保存済み";
+    note.className = "note";
+  }
+}
+
+function refreshEditorButtons() {
+  const buf = currentBuffer();
+  $("save").disabled = !buf || buf.clean;
+  $("undo-save").disabled = !buf || !buf.undoDepth;
+  $("revert").disabled = !buf;
+}
+
+/* ---------- save / undo ---------- */
+
+async function save() {
+  const buf = currentBuffer();
+  if (!buf || buf.clean) return;
+  const file = active.file;
+  const text = currentText();
+  const res = await fetch(`/api/file?path=${encodeURIComponent(file)}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text, if_match: buf.digest }),
+  });
+  if (res.status === 409) {
+    // Someone else wrote it. Keep the buffer -- losing typing is worse than a stale file.
+    buf.diskDigest = null;
+    showError((await res.json()).detail);
+    showEditorNote(buf);
+    status(`保存できない: ${file} が競合`);
+    return;
+  }
+  if (!res.ok) {
+    showError((await res.json()).detail ?? res.statusText);
+    return;
+  }
+  const state = await res.json();
+  buf.digest = state.digest;
+  buf.diskDigest = state.digest;
+  buf.text = text;
+  buf.undoDepth = state.undo_depth;
+  buf.clean = true;
+  if (cm) buf.generation = buf.doc.changeGeneration(true);
+  clearError();
+  paintTabs();
+  refreshEditorButtons();
+  showEditorNote(buf);
+  status(`保存: ${file}`);
+  // The watcher will notice and push a change; the redraw happens from there.
+}
+
+async function undoSave() {
+  const buf = currentBuffer();
+  if (!buf) return;
+  const file = active.file;
+  const res = await fetch(`/api/file/undo?path=${encodeURIComponent(file)}`, { method: "POST" });
+  if (!res.ok) {
+    showError((await res.json()).detail ?? res.statusText);
+    return;
+  }
+  const state = await res.json();
+  applyDisk(file, state);
+  status(`一つ前の保存に戻した: ${file}`);
+}
+
+async function revert() {
+  const buf = currentBuffer();
+  if (!buf) return;
+  const file = active.file;
+  const res = await fetch(`/api/file?path=${encodeURIComponent(file)}`);
+  if (!res.ok) return;
+  applyDisk(file, await res.json());
+  status(`ディスクから読み直した: ${file}`);
+}
+
+function applyDisk(file, state) {
+  const buf = buffers.get(file);
+  if (!buf) return;
+  buf.digest = state.digest;
+  buf.diskDigest = state.digest;
+  buf.text = state.text;
+  buf.undoDepth = state.undo_depth;
+  buf.clean = true;
+  if (cm && buf.doc) {
+    const cursor = buf.doc.getCursor();
+    buf.doc.setValue(state.text);
+    buf.doc.setCursor(cursor);
+    buf.generation = buf.doc.changeGeneration(true);
+  }
+  if (active && active.file === file && !cm) $("editor").value = state.text;
+  clearError();
+  paintTabs();
+  refreshEditorButtons();
+  showEditorNote(buf);
+}
+
+/* When a file we hold changes on disk: reload it silently if we have nothing unsaved,
+   otherwise say so and leave the buffer alone. */
+async function syncFromDisk(paths) {
+  for (const file of paths) {
+    const buf = buffers.get(file);
+    if (!buf) continue;
+    const res = await fetch(`/api/file?path=${encodeURIComponent(file)}`);
+    if (!res.ok) continue;
+    const state = await res.json();
+    if (state.digest === buf.digest) {
+      buf.undoDepth = state.undo_depth;
+      refreshEditorButtons();
+      continue;
+    }
+    if (buf.clean) applyDisk(file, state);
+    else { buf.diskDigest = null; showEditorNote(buf); }
+  }
+}
+
+/* ---------- preview ---------- */
+
 function isFigure() { return $("panel").value === FIGURE; }
+
+function highlightPanel(name) {
+  const box = $("highlight");
+  if (!name || !isFigure() || !spec) { box.hidden = true; return; }
+  const panel = spec.panels.find((p) => p.name === name);
+  if (!panel) { box.hidden = true; return; }
+  const b = panel.inner;
+  box.style.left = `${b.x}mm`;
+  box.style.top = `${b.y}mm`;
+  box.style.width = `${b.w}mm`;
+  box.style.height = `${b.h}mm`;
+  box.hidden = false;
+}
+
+function applyFilter() {
+  const mode = $("filter").value;
+  const stage = $("stage");
+  stage.style.filter =
+    mode === "none" ? "" : mode === "grayscale" ? "grayscale(1)" : `url(#${mode})`;
+}
 
 async function draw(note = "") {
   if (drawing) { pending = true; return; }
@@ -218,8 +555,12 @@ async function draw(note = "") {
     clearError();
     // spec 7.2: drop the output SVG straight into the DOM
     $("stage").innerHTML = body;
+    applyFilter();
+    highlightPanel(active?.panel ?? null);
     const failed = (res.headers.get("X-Figalign-Errors") || "").split(",").filter(Boolean);
-    if (failed.length) showError(`描画に失敗したパネル: ${failed.join(", ")}\n(該当セルにトレースバックを表示)`);
+    if (failed.length) {
+      showError(`描画に失敗したパネル: ${failed.join(", ")}\n(該当セルにトレースバックを表示)`);
+    }
     const passes = res.headers.get("X-Figalign-Passes");
     const conv = res.headers.get("X-Figalign-Converged");
     const align = figure && passes ? ` — 整列${passes}パス${conv === "0" ? " (未収束)" : ""}` : "";
@@ -230,15 +571,15 @@ async function draw(note = "") {
     showError(detail);
     status(`失敗: ${figure ? "figure" : name} — ${ms}ms${note}`);
   }
-
   drawing = false;
   if (pending) { pending = false; draw(note); }
 }
 
+/* ---------- watch ---------- */
+
 function connect(delay = 500) {
   const proto = location.protocol === "https:" ? "wss" : "ws";
   const socket = new WebSocket(`${proto}://${location.host}/ws`);
-
   socket.addEventListener("open", () => {
     $("link").textContent = "watching";
     $("link").className = "live";
@@ -246,8 +587,8 @@ function connect(delay = 500) {
   socket.addEventListener("message", async (event) => {
     const msg = JSON.parse(event.data);
     if (msg.kind !== "change") return;
+    await syncFromDisk(msg.paths);
     const label = SCOPE_LABEL[msg.scope] ?? msg.scope;
-    // A layout change can add or remove panels, so the spec is re-read first.
     if (await loadSpec()) draw(` — ${label}の変更を反映 (${msg.paths.join(", ")})`);
   });
   socket.addEventListener("close", () => {
@@ -258,11 +599,41 @@ function connect(delay = 500) {
   socket.addEventListener("error", () => socket.close());
 }
 
-$("panel").addEventListener("change", () => draw());
+/* ---------- wiring ---------- */
+
+if (window.CodeMirror) {
+  cm = CodeMirror.fromTextArea($("editor"), {
+    lineNumbers: true,
+    lineWrapping: false,
+    indentUnit: 4,
+    // No LSP, no completion: this is for nudging an axis range while watching the preview
+    // (spec 4, 7.1).
+    extraKeys: { "Cmd-S": save, "Ctrl-S": save },
+  });
+  cm.on("change", markDirty);
+} else {
+  // The CDN is unreachable. A plain textarea still edits files, which is the point.
+  $("editor").addEventListener("input", markDirty);
+  status("CodeMirror を読めなかったので素のテキストエリアで編集します");
+}
+
+$("panel").addEventListener("change", () => { draw(); highlightPanel(active?.panel ?? null); });
 $("reload").addEventListener("click", () => draw());
+$("filter").addEventListener("change", applyFilter);
+$("save").addEventListener("click", save);
+$("undo-save").addEventListener("click", undoSave);
+$("revert").addEventListener("click", revert);
+$("toggle-editor").addEventListener("click", () => {
+  const pane = $("editor-pane");
+  pane.hidden = !pane.hidden;
+  if (!pane.hidden && cm) cm.refresh();
+});
 for (const id of ["w", "h"]) {
   $(id).addEventListener("keydown", (e) => { if (e.key === "Enter") draw(); });
 }
+window.addEventListener("keydown", (e) => {
+  if ((e.metaKey || e.ctrlKey) && e.key === "s") { e.preventDefault(); save(); }
+});
 
 loadSpec().then((ok) => { if (ok) draw(); connect(); });
 </script>
