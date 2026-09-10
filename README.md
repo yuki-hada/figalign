@@ -1,3 +1,5 @@
+**English** | [日本語](README.ja.md)
+
 # figalign
 
 Lay out paper figures at **true physical size**.
