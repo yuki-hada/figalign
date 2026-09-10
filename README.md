@@ -14,9 +14,9 @@ Because nothing is scaled afterwards, font sizes and line widths never drift bet
 
 ## Install
 
+In a clone of this repository:
+
 ```sh
-git clone https://github.com/yuki-hada/figalign
-cd figalign
 uv sync
 uv run figalign example
 ```
