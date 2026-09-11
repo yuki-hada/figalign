@@ -32,19 +32,56 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
+    parser.add_argument(
+        "--allow-remote",
+        action="store_true",
+        help="permit binding somewhere other than loopback (see the note it prints)",
+    )
+    parser.add_argument(
+        "--no-token",
+        action="store_true",
+        help="serve without a token; only sensible on a machine you are alone on",
+    )
+    parser.add_argument(
+        "--trust",
+        action="store_true",
+        help="run this directory's code without asking first",
+    )
     args = parser.parse_args(argv)
 
     root: Path = args.root.resolve()
     if not root.is_dir():
         parser.error(f"not a directory: {root}")
 
+    from .security import ensure_trusted, is_loopback, new_token
+
+    # Rendering runs the project's Python either way, so ask before either path.
+    decision = ensure_trusted(root, assume_yes=args.trust)
+    if not decision.granted:
+        print(f"figalign: stopping without running anything ({decision.reason})", file=sys.stderr)
+        return 1
+
     if args.export is not None:
         return _export(root, args.export, keep_text=args.keep_text, parser=parser)
 
+    if not is_loopback(args.host) and not args.allow_remote:
+        parser.error(
+            f"--host {args.host} would expose the editing API to the network, and reaching "
+            "it is enough to run code in this directory. Prefer leaving the server on "
+            "loopback and forwarding the port: ssh -L 8765:localhost:8765 <host>. "
+            "Pass --allow-remote if you mean it."
+        )
+
     from .server import serve
 
-    print(f"figalign: {root}  ->  http://{args.host}:{args.port}")
-    serve(root, host=args.host, port=args.port)
+    token = "" if args.no_token else new_token()
+    suffix = f"/?token={token}" if token else "/"
+    print(f"figalign: {root}  ->  http://{args.host}:{args.port}{suffix}")
+    if not token:
+        print("figalign: serving without a token; anyone who can reach the port can run code")
+    elif not is_loopback(args.host):
+        print("figalign: bound off loopback; the token is the only thing guarding the API")
+    serve(root, host=args.host, port=args.port, token=token)
     return 0
 
 

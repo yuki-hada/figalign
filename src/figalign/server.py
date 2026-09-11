@@ -6,16 +6,32 @@ server can be viewed in the browser on your own machine (spec 8.1).
 
 from __future__ import annotations
 
+import secrets
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import Body, FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, Response
+from fastapi import (
+    Body,
+    FastAPI,
+    HTTPException,
+    Query,
+    Request,
+    WebSocket,
+    WebSocketDisconnect,
+)
+from fastapi.responses import (
+    FileResponse,
+    HTMLResponse,
+    JSONResponse,
+    PlainTextResponse,
+    Response,
+)
 
 from . import compose, figspec, files, loader
 from .export import ExportError, to_pdf
 from .figure import _read_src, build_figure, resolve
 from .figspec import FIG_TOML, FigSpec, SpecError
+from .security import TOKEN_COOKIE, TOKEN_HEADER, TOKEN_QUERY, new_token
 from .files import ConflictError, FileAccessError
 from .grid import GridError
 from .layout import solve_layout
@@ -27,9 +43,11 @@ STATIC = Path(__file__).parent / "static"
 DEFAULT_HEIGHT_MM = 50.0  # only used by the single-panel view, where no solver runs
 
 
-def create_app(root: Path, watch: bool = True) -> FastAPI:
+def create_app(root: Path, watch: bool = True, token: str | None = None) -> FastAPI:
     root = root.resolve()
     hub = Hub()
+    # `token=""` disables the check; None asks for a fresh one.
+    token = new_token() if token is None else token
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
@@ -40,6 +58,31 @@ def create_app(root: Path, watch: bool = True) -> FastAPI:
             yield
 
     app = FastAPI(title="figalign", docs_url=None, redoc_url=None, lifespan=lifespan)
+    app.state.token = token
+
+    def token_ok(request: Request) -> bool:
+        if not token:
+            return True
+        offered = (
+            request.query_params.get(TOKEN_QUERY)
+            or request.headers.get(TOKEN_HEADER)
+            or request.cookies.get(TOKEN_COOKIE)
+        )
+        return bool(offered) and secrets.compare_digest(offered, token)
+
+    @app.middleware("http")
+    async def require_token(request: Request, call_next):
+        """Reaching the API is enough to run code, so everything but the page needs the token.
+
+        The page itself is allowed through so that the token can arrive in the query string
+        and be exchanged for a cookie; it contains nothing but the shell of the UI.
+        """
+        if request.url.path == "/" or token_ok(request):
+            return await call_next(request)
+        return JSONResponse(
+            {"detail": "missing or wrong token; open the URL figalign printed at startup"},
+            status_code=403,
+        )
 
     def current_spec() -> FigSpec:
         try:
@@ -73,8 +116,20 @@ def create_app(root: Path, watch: bool = True) -> FastAPI:
         return render(fn, data, size, spec.preset, panel=name)
 
     @app.get("/", response_class=HTMLResponse)
-    def index() -> FileResponse:
-        return FileResponse(STATIC / "index.html")
+    def index(request: Request) -> Response:
+        if not token_ok(request):
+            return PlainTextResponse(
+                "figalign: open the URL printed at startup, the one carrying ?token=",
+                status_code=403,
+            )
+        response = FileResponse(STATIC / "index.html")
+        if token:
+            # The page fetches /api/... itself, so hand it a cookie rather than making
+            # every request in the front end remember to carry the token.
+            response.set_cookie(
+                TOKEN_COOKIE, token, httponly=True, samesite="strict", path="/"
+            )
+        return response
 
     @app.get("/api/spec")
     def api_spec() -> dict:
@@ -107,6 +162,10 @@ def create_app(root: Path, watch: bool = True) -> FastAPI:
     @app.websocket("/ws")
     async def ws(socket: WebSocket) -> None:
         """Push a notification whenever a watched file changes. The client re-fetches."""
+        offered = socket.query_params.get(TOKEN_QUERY) or socket.cookies.get(TOKEN_COOKIE)
+        if token and not (offered and secrets.compare_digest(offered, token)):
+            await socket.close(code=1008)
+            return
         await socket.accept()
         hub.add(socket)
         try:
@@ -278,7 +337,9 @@ def _editable_files(spec: FigSpec) -> list[dict]:
     return out
 
 
-def serve(root: Path, host: str = "127.0.0.1", port: int = 8765) -> None:
+def serve(
+    root: Path, host: str = "127.0.0.1", port: int = 8765, token: str | None = None
+) -> None:
     import uvicorn
 
-    uvicorn.run(create_app(root), host=host, port=port, log_level="warning")
+    uvicorn.run(create_app(root, token=token), host=host, port=port, log_level="warning")

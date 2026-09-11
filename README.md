@@ -51,6 +51,20 @@ pixi run figalign example -o figure.svg
 When the data lives on a compute server, start the server there and forward the port with
 `ssh -L 8765:localhost:8765 <host>`.
 
+## Security
+
+Reaching the HTTP API is enough to run code: a client can write a `.py` into the project and
+point `fig.toml` at it. So the server requires a token, which is printed in the URL at
+startup, and refuses to bind anywhere but loopback unless you pass `--allow-remote`.
+
+On a shared machine loopback is not private -- anyone logged into the same node can reach
+127.0.0.1 -- which is why the token is there as well. To reach the preview from elsewhere,
+forward the port rather than binding wide: `ssh -L 8765:localhost:8765 <host>`.
+
+Rendering a figure runs the project's Python, the same as `python panels.py` would. figalign
+asks once per directory before it does that and remembers the answer in
+`~/.config/figalign/`. `--trust` accepts without asking, `--no-token` serves without a token.
+
 ## Writing a figure
 
 `fig.toml`:
