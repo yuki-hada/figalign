@@ -72,7 +72,7 @@ def solve_layout(spec: FigSpec) -> Layout:
 
     width_mm, height_mm = total_size(col_widths, row_heights, spec.gap_x_mm, spec.gap_y_mm)
     boxes = cell_boxes(spec.cells, col_widths, row_heights, spec.gap_x_mm, spec.gap_y_mm)
-    labels = panel_labels(spec.order) if spec.labels else {}
+    labels = panel_labels(spec)
     return Layout(width_mm=width_mm, height_mm=height_mm, boxes=boxes, labels=labels)
 
 
@@ -120,7 +120,7 @@ def solve_aligned(spec: FigSpec, margins: dict[str, Margins]) -> Layout:
         width_mm=total_w,
         height_mm=total_h,
         boxes=outer,
-        labels=panel_labels(spec.order) if spec.labels else {},
+        labels=panel_labels(spec),
         inner=inner,
     )
 
@@ -134,16 +134,35 @@ def _reserve_label_space(
     margin is often zero otherwise -- no title, no spine -- so without this the letter would
     have nowhere to go.
     """
+    labels = panel_labels(spec)
     height = pt_to_mm(preset.font_size_pt)
-    width = height * LABEL_WIDTH_RATIO
-    for cell in spec.cells.values():
+    for name, text in labels.items():
+        cell = spec.cells[name]
+        # A wider label needs a wider corner; a single letter is narrower than the em.
+        width = height * LABEL_WIDTH_RATIO * max(len(text), 1)
         lead_y[cell.row0] = max(lead_y[cell.row0], height + LABEL_PAD_MM)
         lead_x[cell.col0] = max(lead_x[cell.col0], width + LABEL_PAD_MM)
 
 
-def panel_labels(order: list[str]) -> dict[str, str]:
-    """Assign a, b, c... in reading order over the grid (spec 6.3)."""
-    return {name: _letter(i) for i, name in enumerate(order)}
+def panel_labels(spec: FigSpec) -> dict[str, str]:
+    """Assign a, b, c... in reading order over the grid.
+
+    A panel with `label = false` gets none and does not consume a letter, so a schematic
+    that is not lettered leaves the rest of the figure reading a, b, c without a gap. A
+    panel with `label = "..."` keeps its position in the sequence but shows that text, so
+    renaming one does not shift the others.
+    """
+    if not spec.labels:
+        return {}
+    out: dict[str, str] = {}
+    index = 0
+    for name in spec.order:
+        panel = spec.panels[name]
+        if not panel.labelled:
+            continue
+        out[name] = panel.label if isinstance(panel.label, str) else _letter(index)
+        index += 1
+    return out
 
 
 def _letter(index: int) -> str:

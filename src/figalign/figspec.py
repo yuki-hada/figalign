@@ -29,10 +29,17 @@ class PanelDef:
     name: str
     fn: str | None = None  # "panels.py:scatter_main"
     src: str | None = None  # an external asset such as a hand-drawn SVG
+    # None lets the auto-numbering pick the letter; a string replaces it; False means this
+    # panel gets no label and is skipped when the letters are handed out.
+    label: str | bool | None = None
 
     @property
     def kind(self) -> str:
         return "fn" if self.fn else "src"
+
+    @property
+    def labelled(self) -> bool:
+        return self.label is not False
 
 
 @dataclass(frozen=True)
@@ -103,7 +110,16 @@ def build_spec(root: Path, raw: dict[str, Any]) -> FigSpec:
             raise SpecError(f"[panels.{name}] cannot have both fn and src")
         if not fn and not src:
             raise SpecError(f"[panels.{name}] needs either fn or src")
-        panels[name] = PanelDef(name=name, fn=fn, src=src)
+        label = body.get("label")
+        if label is True:
+            # `true` would read as "yes, label it", which is already the default.
+            label = None
+        if not (label is None or label is False or isinstance(label, str)):
+            raise SpecError(
+                f"[panels.{name}] label must be a string or false, not "
+                f"{type(label).__name__}"
+            )
+        panels[name] = PanelDef(name=name, fn=fn, src=src, label=label)
 
     if not panels:
         raise SpecError("no panels are defined")

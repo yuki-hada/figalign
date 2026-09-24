@@ -70,6 +70,7 @@ fn = "panels.py:scatter_main"
 
 [panels.c]
 src = "schema.svg"              # 手描き素材をセルに流し込む
+label = false                   # このパネルには記号を振らない
 ```
 
 | キー | 既定 | 内容 |
@@ -82,6 +83,8 @@ src = "schema.svg"              # 手描き素材をセルに流し込む
 | `height` | 未指定 (`1fr` = 40mm) | 総高さ。指定すると fr が残りを按分する |
 | `labels` | `true` | a, b, c... の自動採番 |
 | `data` | あれば `panels.py:load_data` | データ層の入口 |
+
+パネルの中では `label = "A"` で記号を差し替え、`label = false` で消せる。消したパネルは記号を消費しないので残りは a, b, c と連続したままになり、差し替えたパネルは並びの中の位置を保つ。
 
 `panels.py`:
 

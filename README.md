@@ -83,6 +83,7 @@ fn = "panels.py:scatter_main"
 
 [panels.c]
 src = "schema.svg"              # pour a hand-drawn asset into the cell
+label = false                   # this one gets no letter
 ```
 
 | Key | Default | Meaning |
@@ -95,6 +96,10 @@ src = "schema.svg"              # pour a hand-drawn asset into the cell
 | `height` | unset (`1fr` = 40mm) | total height; when set, fr splits the remainder |
 | `labels` | `true` | auto-number panels a, b, c... |
 | `data` | `panels.py:load_data` if present | entry point of the data layer |
+
+Within a panel, `label = "A"` replaces its letter and `label = false` removes it. A removed
+label does not consume a letter, so the rest still read a, b, c with no gap, while a
+replaced one keeps its position in the sequence.
 
 `panels.py`:
 
